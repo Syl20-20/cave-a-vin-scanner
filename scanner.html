@@ -11,7 +11,7 @@
     background: #f5f5f4; color: #292524;
   }
   h1 { font-size: 1.1rem; margin-bottom: 12px; }
-  #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; min-height: 280px; }
+  #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; min-height: 280px; cursor: pointer; }
   button {
     width: 100%; padding: 14px; margin-top: 12px; border: none; border-radius: 12px;
     font-size: 1rem; font-weight: 600; background: #7c2d3e; color: white;
@@ -39,7 +39,34 @@
   const APPS_SCRIPT_URL = 'COLLEZ_ICI_URL_DE_VOTRE_APP/exec';
 
   let html5QrCode = null;
+  let currentVideoTrack = null;
   const statusEl = document.getElementById('status');
+
+  // ---------- MISE AU POINT TACTILE ----------
+  // Permet de taper sur l'image caméra pour forcer une nouvelle mise au point à cet endroit
+  document.getElementById('reader').addEventListener('click', (e) => {
+    if (!currentVideoTrack) return;
+    const capabilities = currentVideoTrack.getCapabilities ? currentVideoTrack.getCapabilities() : {};
+    if (!capabilities.focusMode || !capabilities.focusMode.includes('manual')) {
+      // Le téléphone ne permet pas de piloter le focus manuellement depuis le web :
+      // on retente simplement un focus automatique complet en dernier recours.
+      if (capabilities.focusMode && capabilities.focusMode.includes('single-shot')) {
+        currentVideoTrack.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] }).catch(() => {});
+      }
+      statusEl.textContent = 'Mise au point automatique relancée...';
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    currentVideoTrack.applyConstraints({
+      advanced: [{ focusMode: 'manual', pointsOfInterest: [{ x: x, y: y }] }]
+    }).then(() => {
+      statusEl.textContent = 'Mise au point ajustée. Visez le code-barres...';
+    }).catch(() => {
+      statusEl.textContent = 'Impossible de régler la mise au point sur cet appareil.';
+    });
+  });
 
   document.getElementById('btnStart').addEventListener('click', () => {
     const btn = document.getElementById('btnStart');
@@ -81,7 +108,15 @@
         },
         () => {}
       ).then(() => {
-        statusEl.textContent = 'Visez le code-barres... (ne re-cliquez pas)';
+        statusEl.textContent = 'Visez le code-barres... (touchez l\'image pour ajuster la mise au point)';
+        // Récupère la piste vidéo active pour permettre la mise au point tactile
+        setTimeout(() => {
+          const videoEl = document.querySelector('#reader video');
+          if (videoEl && videoEl.srcObject) {
+            const tracks = videoEl.srcObject.getVideoTracks();
+            if (tracks && tracks.length > 0) currentVideoTrack = tracks[0];
+          }
+        }, 500);
         // Filet de sécurité : si rien n'est détecté après 25s, on réactive le bouton
         window._scanTimeout = setTimeout(() => {
           if (html5QrCode) {
