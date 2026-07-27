@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Scanner - Cave à Vin</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  body {
+    margin: 0; padding: 16px; font-family: -apple-system, sans-serif;
+    background: #f5f5f4; color: #292524;
+  }
+  h1 { font-size: 1.1rem; margin-bottom: 12px; }
+  #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; min-height: 280px; }
+  button {
+    width: 100%; padding: 14px; margin-top: 12px; border: none; border-radius: 12px;
+    font-size: 1rem; font-weight: 600; background: #7c2d3e; color: white;
+  }
+  #status { margin-top: 10px; font-size: 0.9rem; color: #78716c; text-align: center; }
+  input {
+    width: 100%; box-sizing: border-box; padding: 10px; margin-top: 10px;
+    border: 1px solid #d6d3d1; border-radius: 12px; font-size: 1rem;
+  }
+</style>
+</head>
+<body>
+  <h1>🍷 Scanner un code-barres</h1>
+  <div id="reader"></div>
+  <button id="btnStart">📷 Démarrer le scan</button>
+  <input id="manualCode" type="text" inputmode="numeric" placeholder="Ou saisir le code-barres manuellement">
+  <button id="btnManual" style="background:#292524;">Envoyer ce code</button>
+  <p id="status"></p>
+
+<script>
+  // ⚠️ REMPLACEZ cette URL par l'URL de VOTRE déploiement Apps Script (celle qui finit par /exec)
+  const APPS_SCRIPT_URL = 'COLLEZ_ICI_URL_DE_VOTRE_APP/exec';
+
+  let html5QrCode = null;
+  const statusEl = document.getElementById('status');
+
+  document.getElementById('btnStart').addEventListener('click', () => {
+    statusEl.textContent = 'Initialisation de la caméra...';
+    html5QrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras().then(cameras => {
+      if (!cameras || cameras.length === 0) {
+        statusEl.textContent = 'Aucune caméra détectée.';
+        return;
+      }
+      const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+      html5QrCode.start(
+        backCam.id,
+        { fps: 10, qrbox: { width: 260, height: 160 } },
+        (decodedText) => {
+          statusEl.textContent = 'Code détecté : ' + decodedText;
+          html5QrCode.stop().then(() => redirectWithBarcode(decodedText));
+        },
+        () => {}
+      ).then(() => {
+        statusEl.textContent = 'Visez le code-barres...';
+      }).catch(err => {
+        statusEl.textContent = "Erreur d'accès caméra : " + err;
+      });
+    }).catch(err => {
+      statusEl.textContent = 'Permission caméra refusée ou indisponible : ' + err;
+    });
+  });
+
+  document.getElementById('btnManual').addEventListener('click', () => {
+    const code = document.getElementById('manualCode').value.trim();
+    if (code) redirectWithBarcode(code);
+  });
+
+  function redirectWithBarcode(barcode) {
+    statusEl.textContent = 'Retour vers l\'application...';
+    window.location.href = APPS_SCRIPT_URL + '?barcode=' + encodeURIComponent(barcode);
+  }
+</script>
+</body>
+</html>
