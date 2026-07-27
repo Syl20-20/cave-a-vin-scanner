@@ -27,6 +27,9 @@
   <h1>🍷 Scanner un code-barres</h1>
   <div id="reader"></div>
   <button id="btnStart">📷 Démarrer le scan</button>
+  <p style="font-size:0.85rem; color:#78716c; text-align:center; margin:4px 0 0;">
+    Une fois la caméra activée, visez simplement le code-barres — pas besoin de re-cliquer.
+  </p>
   <input id="manualCode" type="text" inputmode="numeric" placeholder="Ou saisir le code-barres manuellement">
   <button id="btnManual" style="background:#292524;">Envoyer ce code</button>
   <p id="status"></p>
@@ -39,11 +42,17 @@
   const statusEl = document.getElementById('status');
 
   document.getElementById('btnStart').addEventListener('click', () => {
+    const btn = document.getElementById('btnStart');
+    if (btn.disabled) return; // empêche un second clic pendant que le scan tourne déjà
+    btn.disabled = true;
+    btn.textContent = '📷 Scan en cours...';
     statusEl.textContent = 'Initialisation de la caméra...';
     html5QrCode = new Html5Qrcode("reader");
     Html5Qrcode.getCameras().then(cameras => {
       if (!cameras || cameras.length === 0) {
         statusEl.textContent = 'Aucune caméra détectée.';
+        btn.disabled = false;
+        btn.textContent = '📷 Démarrer le scan';
         return;
       }
       const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
@@ -66,12 +75,16 @@
         },
         () => {}
       ).then(() => {
-        statusEl.textContent = 'Visez le code-barres...';
+        statusEl.textContent = 'Visez le code-barres... (ne re-cliquez pas)';
       }).catch(err => {
         statusEl.textContent = "Erreur d'accès caméra : " + err;
+        btn.disabled = false;
+        btn.textContent = '📷 Démarrer le scan';
       });
     }).catch(err => {
       statusEl.textContent = 'Permission caméra refusée ou indisponible : ' + err;
+      btn.disabled = false;
+      btn.textContent = '📷 Démarrer le scan';
     });
   });
 
