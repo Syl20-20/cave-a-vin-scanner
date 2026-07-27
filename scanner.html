@@ -59,23 +59,37 @@
       html5QrCode.start(
         backCam.id,
         {
-          fps: 10,
-          qrbox: { width: 280, height: 180 },
+          fps: 15,
+          qrbox: { width: 300, height: 120 },
+          aspectRatio: 1.777,
+          disableFlip: false,
           formatsToSupport: [
             Html5QrcodeSupportedFormats.EAN_13,
             Html5QrcodeSupportedFormats.EAN_8,
             Html5QrcodeSupportedFormats.UPC_A,
             Html5QrcodeSupportedFormats.UPC_E,
             Html5QrcodeSupportedFormats.CODE_128
-          ]
+          ],
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true
+          }
         },
         (decodedText) => {
+          clearTimeout(window._scanTimeout);
           statusEl.textContent = 'Code détecté : ' + decodedText;
           html5QrCode.stop().then(() => redirectWithBarcode(decodedText));
         },
         () => {}
       ).then(() => {
         statusEl.textContent = 'Visez le code-barres... (ne re-cliquez pas)';
+        // Filet de sécurité : si rien n'est détecté après 25s, on réactive le bouton
+        window._scanTimeout = setTimeout(() => {
+          if (html5QrCode) {
+            statusEl.textContent = 'Aucun code détecté. Réessayez ou utilisez la saisie manuelle ci-dessous.';
+            btn.disabled = false;
+            btn.textContent = '📷 Démarrer le scan';
+          }
+        }, 25000);
       }).catch(err => {
         statusEl.textContent = "Erreur d'accès caméra : " + err;
         btn.disabled = false;
