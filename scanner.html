@@ -33,7 +33,7 @@
 
 <script>
   // ⚠️ REMPLACEZ cette URL par l'URL de VOTRE déploiement Apps Script (celle qui finit par /exec)
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyrVxxO5KOxkUONkotZLp7jjKs7vfwHzN8f-zWzTXrAuhEciP8ypRcdXee5TLmTvqe3sw/exec';
+  const APPS_SCRIPT_URL = 'COLLEZ_ICI_URL_DE_VOTRE_APP/exec';
 
   let html5QrCode = null;
   const statusEl = document.getElementById('status');
@@ -49,7 +49,17 @@
       const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
       html5QrCode.start(
         backCam.id,
-        { fps: 10, qrbox: { width: 260, height: 160 } },
+        {
+          fps: 10,
+          qrbox: { width: 280, height: 180 },
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128
+          ]
+        },
         (decodedText) => {
           statusEl.textContent = 'Code détecté : ' + decodedText;
           html5QrCode.stop().then(() => redirectWithBarcode(decodedText));
