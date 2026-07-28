@@ -1,153 +1,247 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Scanner - Cave à Vin</title>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<style>
-  body {
-    margin: 0; padding: 16px; font-family: -apple-system, sans-serif;
-    background: #f5f5f4; color: #292524;
-  }
-  h1 { font-size: 1.1rem; margin-bottom: 12px; }
-  #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; min-height: 280px; cursor: pointer; }
-  button {
-    width: 100%; padding: 14px; margin-top: 12px; border: none; border-radius: 12px;
-    font-size: 1rem; font-weight: 600; background: #7c2d3e; color: white;
-  }
-  #status { margin-top: 10px; font-size: 0.9rem; color: #78716c; text-align: center; }
-  input {
-    width: 100%; box-sizing: border-box; padding: 10px; margin-top: 10px;
-    border: 1px solid #d6d3d1; border-radius: 12px; font-size: 1rem;
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Scanner - Cave à Vin</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f5f5f4;
+      color: #292524;
+    }
+    h1 {
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+    }
+    #reader {
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      min-height: 280px;
+    }
+    button, .file-label {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      background: #7c2d3e;
+      color: white;
+      display: block;
+      text-align: center;
+      box-sizing: border-box;
+      text-decoration: none;
+    }
+    #btnStop {
+      background: #57534e;
+    }
+    #btnManual {
+      background: #292524;
+    }
+    .file-label {
+      background: #0f766e;
+      cursor: pointer;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 0.92rem;
+      color: #78716c;
+      text-align: center;
+      min-height: 1.2em;
+    }
+    input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      margin-top: 10px;
+      border: 1px solid #d6d3d1;
+      border-radius: 12px;
+      font-size: 1rem;
+      background: #fff;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    .hint {
+      font-size: 0.85rem;
+      color: #78716c;
+      text-align: center;
+      margin: 6px 0 0;
+    }
+  </style>
 </head>
 <body>
   <h1>🍷 Scanner un code-barres</h1>
+
   <div id="reader"></div>
+
   <button id="btnStart">📷 Démarrer le scan</button>
-  <p style="font-size:0.85rem; color:#78716c; text-align:center; margin:4px 0 0;">
-    Une fois la caméra activée, visez simplement le code-barres — pas besoin de re-cliquer.
+  <button id="btnStop" disabled>⏹ Arrêter le scan</button>
+
+  <p class="hint">
+    Sur iPhone, approche le code, remplis bien le cadre, essaie avec bonne lumière.
   </p>
+
+  <label for="fileInput" class="file-label">🖼️ Scanner à partir d’une photo</label>
+  <input id="fileInput" type="file" accept="image/*" capture="environment">
+
   <input id="manualCode" type="text" inputmode="numeric" placeholder="Ou saisir le code-barres manuellement">
-  <button id="btnManual" style="background:#292524;">Envoyer ce code</button>
+  <button id="btnManual">Envoyer ce code</button>
+
   <p id="status"></p>
 
-<script>
-  // ⚠️ REMPLACEZ cette URL par l'URL de VOTRE déploiement Apps Script (celle qui finit par /exec)
-  const APPS_SCRIPT_URL = 'COLLEZ_ICI_URL_DE_VOTRE_APP/exec';
+  <script>
+    const APPS_SCRIPT_URL = 'COLLEZ_ICI_URL_DE_VOTRE_APP/exec';
 
-  let html5QrCode = null;
-  let currentVideoTrack = null;
-  const statusEl = document.getElementById('status');
+    let html5QrCode = null;
+    let scanning = false;
+    let scanTimeout = null;
 
-  // ---------- MISE AU POINT TACTILE ----------
-  // Permet de taper sur l'image caméra pour forcer une nouvelle mise au point à cet endroit
-  document.getElementById('reader').addEventListener('click', (e) => {
-    if (!currentVideoTrack) return;
-    const capabilities = currentVideoTrack.getCapabilities ? currentVideoTrack.getCapabilities() : {};
-    if (!capabilities.focusMode || !capabilities.focusMode.includes('manual')) {
-      // Le téléphone ne permet pas de piloter le focus manuellement depuis le web :
-      // on retente simplement un focus automatique complet en dernier recours.
-      if (capabilities.focusMode && capabilities.focusMode.includes('single-shot')) {
-        currentVideoTrack.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] }).catch(() => {});
-      }
-      statusEl.textContent = 'Mise au point automatique relancée...';
-      return;
+    const statusEl = document.getElementById('status');
+    const btnStart = document.getElementById('btnStart');
+    const btnStop = document.getElementById('btnStop');
+    const fileInput = document.getElementById('fileInput');
+
+    function isIOS() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    currentVideoTrack.applyConstraints({
-      advanced: [{ focusMode: 'manual', pointsOfInterest: [{ x: x, y: y }] }]
-    }).then(() => {
-      statusEl.textContent = 'Mise au point ajustée. Visez le code-barres...';
-    }).catch(() => {
-      statusEl.textContent = 'Impossible de régler la mise au point sur cet appareil.';
-    });
-  });
 
-  document.getElementById('btnStart').addEventListener('click', () => {
-    const btn = document.getElementById('btnStart');
-    if (btn.disabled) return; // empêche un second clic pendant que le scan tourne déjà
-    btn.disabled = true;
-    btn.textContent = '📷 Scan en cours...';
-    statusEl.textContent = 'Initialisation de la caméra...';
-    html5QrCode = new Html5Qrcode("reader");
-    Html5Qrcode.getCameras().then(cameras => {
-      if (!cameras || cameras.length === 0) {
-        statusEl.textContent = 'Aucune caméra détectée.';
-        btn.disabled = false;
-        btn.textContent = '📷 Démarrer le scan';
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    function redirectWithBarcode(barcode) {
+      setStatus("Retour vers l'application...");
+      window.location.href = APPS_SCRIPT_URL + '?barcode=' + encodeURIComponent(barcode);
+    }
+
+    function getQrbox(viewfinderWidth, viewfinderHeight) {
+      const width = Math.floor(viewfinderWidth * 0.9);
+      const height = Math.max(120, Math.floor(viewfinderHeight * 0.35));
+      return { width, height };
+    }
+
+    async function startScanner() {
+      if (scanning) return;
+
+      btnStart.disabled = true;
+      btnStop.disabled = false;
+      setStatus('Initialisation de la caméra...');
+
+      html5QrCode = new Html5Qrcode("reader");
+      scanning = true;
+
+      try {
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          {
+            fps: isIOS() ? 8 : 10,
+            qrbox: getQrbox,
+            disableFlip: true,
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.CODE_128
+            ],
+            aspectRatio: 1.7778
+          },
+          (decodedText) => {
+            clearTimeout(scanTimeout);
+            setStatus('Code détecté : ' + decodedText);
+            stopScanner(true).then(() => redirectWithBarcode(decodedText));
+          },
+          () => {}
+        );
+
+        setStatus(isIOS()
+          ? 'Caméra active. Sur iPhone, recule ou avance légèrement si ça ne lit pas.'
+          : 'Caméra active. Visez le code-barres.'
+        );
+
+        scanTimeout = setTimeout(() => {
+          setStatus("Aucun code détecté. Essaie une photo ou la saisie manuelle.");
+          btnStart.disabled = false;
+          btnStop.disabled = true;
+        }, 25000);
+
+      } catch (err) {
+        scanning = false;
+        btnStart.disabled = false;
+        btnStop.disabled = true;
+        setStatus("Erreur d'accès caméra : " + err);
+      }
+    }
+
+    async function stopScanner(silent = false) {
+      clearTimeout(scanTimeout);
+
+      if (!html5QrCode || !scanning) {
+        btnStart.disabled = false;
+        btnStop.disabled = true;
+        scanning = false;
         return;
       }
-      const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
-      html5QrCode.start(
-        backCam.id,
-        {
-          fps: 10,
-          qrbox: { width: 300, height: 150 },
-          disableFlip: false,
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.CODE_128
-          ],
-          videoConstraints: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            advanced: [{ focusMode: 'continuous' }]
-          }
-        },
-        (decodedText) => {
-          clearTimeout(window._scanTimeout);
-          statusEl.textContent = 'Code détecté : ' + decodedText;
-          html5QrCode.stop().then(() => redirectWithBarcode(decodedText));
-        },
-        () => {}
-      ).then(() => {
-        statusEl.textContent = 'Visez le code-barres... (touchez l\'image pour ajuster la mise au point)';
-        // Récupère la piste vidéo active pour permettre la mise au point tactile
-        setTimeout(() => {
-          const videoEl = document.querySelector('#reader video');
-          if (videoEl && videoEl.srcObject) {
-            const tracks = videoEl.srcObject.getVideoTracks();
-            if (tracks && tracks.length > 0) currentVideoTrack = tracks[0];
-          }
-        }, 500);
-        // Filet de sécurité : si rien n'est détecté après 25s, on réactive le bouton
-        window._scanTimeout = setTimeout(() => {
-          if (html5QrCode) {
-            statusEl.textContent = 'Aucun code détecté. Réessayez ou utilisez la saisie manuelle ci-dessous.';
-            btn.disabled = false;
-            btn.textContent = '📷 Démarrer le scan';
-          }
-        }, 25000);
-      }).catch(err => {
-        statusEl.textContent = "Erreur d'accès caméra : " + err;
-        btn.disabled = false;
-        btn.textContent = '📷 Démarrer le scan';
-      });
-    }).catch(err => {
-      statusEl.textContent = 'Permission caméra refusée ou indisponible : ' + err;
-      btn.disabled = false;
-      btn.textContent = '📷 Démarrer le scan';
+
+      try {
+        await html5QrCode.stop();
+      } catch (e) {}
+
+      try {
+        await html5QrCode.clear();
+      } catch (e) {}
+
+      html5QrCode = null;
+      scanning = false;
+      btnStart.disabled = false;
+      btnStop.disabled = true;
+
+      if (!silent) setStatus("Scan arrêté.");
+    }
+
+    btnStart.addEventListener('click', startScanner);
+    btnStop.addEventListener('click', () => stopScanner());
+
+    fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      try {
+        await stopScanner(true);
+
+        if (!html5QrCode) {
+          html5QrCode = new Html5Qrcode("reader");
+        }
+
+        setStatus("Analyse de l'image...");
+
+        const decodedText = await html5QrCode.scanFile(file, true);
+        setStatus('Code détecté dans la photo : ' + decodedText);
+        redirectWithBarcode(decodedText);
+      } catch (err) {
+        setStatus("Impossible de lire le code dans cette photo.");
+      } finally {
+        fileInput.value = '';
+      }
     });
-  });
 
-  document.getElementById('btnManual').addEventListener('click', () => {
-    const code = document.getElementById('manualCode').value.trim();
-    if (code) redirectWithBarcode(code);
-  });
-
-  function redirectWithBarcode(barcode) {
-    statusEl.textContent = 'Retour vers l\'application...';
-    window.location.href = APPS_SCRIPT_URL + '?barcode=' + encodeURIComponent(barcode);
-  }
-</script>
+    document.getElementById('btnManual').addEventListener('click', () => {
+      const code = document.getElementById('manualCode').value.trim();
+      if (code) {
+        redirectWithBarcode(code);
+      } else {
+        setStatus("Entre un code avant d'envoyer.");
+      }
+    });
+  </script>
 </body>
 </html>
