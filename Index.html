@@ -165,7 +165,7 @@
           <label class="text-xs text-stone-500">En stock
             <select id="filterEnStock" class="w-full border border-stone-300 rounded-xl px-2 py-2 mt-1 text-sm">
               <option value="">Peu importe</option>
-              <option value="oui">Oui</option>
+              <option value="oui" selected>Oui</option>
               <option value="non">Non</option>
             </select>
           </label>
@@ -182,18 +182,56 @@
       </div>
     </section>
 
-  </main>
+    <!-- ONGLET DÉTAIL (consultation) -->
+    <section id="tab-detail" class="tab-content hidden">
+      <div class="bg-white rounded-2xl shadow p-4 mb-4">
+        <img id="detailImage" class="hidden w-28 h-28 object-contain mx-auto mb-3 rounded-lg bg-stone-50" />
+        <h2 id="detailNom" class="text-lg font-bold text-center mb-1"></h2>
+        <p id="detailSousTitre" class="text-sm text-stone-500 text-center mb-3"></p>
 
-  <!-- MODALE : AJUSTEMENT RAPIDE -->
-  <div id="quickModal" class="hidden fixed inset-0 bg-black/50 z-40 flex items-end">
-    <div class="bg-white w-full rounded-t-2xl p-4 max-h-[80vh] overflow-y-auto">
-      <div class="flex justify-between items-center mb-3">
-        <h3 id="quickModalTitle" class="font-semibold text-lg"></h3>
-        <button id="quickModalClose" class="text-stone-400 text-2xl leading-none">&times;</button>
+        <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+          <div><span class="text-stone-400">Producteur :</span> <span id="detailProducteur">—</span></div>
+          <div><span class="text-stone-400">Cépage :</span> <span id="detailCepage">—</span></div>
+          <div><span class="text-stone-400">Millésime :</span> <span id="detailMillesime">—</span></div>
+          <div><span class="text-stone-400">Prix SAQ :</span> <span id="detailPrix">—</span></div>
+          <div><span class="text-stone-400">Note :</span> <span id="detailNote">—</span></div>
+        </div>
+
+        <div id="detailCommentaire" class="text-sm text-stone-600 bg-stone-50 rounded-xl p-3 mb-3 hidden"></div>
+
+        <div class="space-y-2 mb-3">
+          <p class="text-sm font-medium text-stone-600">Quantités par emplacement</p>
+          <div id="detailQuantites" class="space-y-2"></div>
+        </div>
+
+        <button id="btnDetailEdit" class="w-full bg-rose-800 text-white rounded-xl py-3 font-medium">✏️ Modifier / Noter</button>
       </div>
-      <div id="quickModalBody"></div>
-    </div>
-  </div>
+    </section>
+
+    <!-- ONGLET ADMIN -->
+    <section id="tab-admin" class="tab-content hidden">
+      <div class="bg-white rounded-2xl shadow p-4 mb-4">
+        <div id="adminLoginBox">
+          <h2 class="font-semibold mb-3">Accès Admin</h2>
+          <input id="adminPassword" type="password" placeholder="Mot de passe" class="w-full border border-stone-300 rounded-xl px-3 py-2 mb-2">
+          <button id="btnAdminLogin" class="w-full bg-stone-800 text-white rounded-xl py-3 font-medium">Déverrouiller</button>
+          <p id="adminLoginError" class="text-red-600 text-sm mt-2 hidden">Mot de passe incorrect.</p>
+        </div>
+
+        <div id="adminPanel" class="hidden">
+          <h2 class="font-semibold mb-3">Panneau Admin</h2>
+          <a id="adminSheetLink" href="#" target="_blank" class="block w-full text-center bg-stone-100 border border-stone-300 rounded-xl py-3 mb-4">
+            📊 Ouvrir le Google Sheet
+          </a>
+
+          <p class="text-sm font-medium text-stone-600 mb-2">Supprimer une bouteille</p>
+          <input id="adminSearch" type="text" placeholder="Rechercher par nom..." class="w-full border border-stone-300 rounded-xl px-3 py-2 mb-2">
+          <div id="adminList" class="space-y-2"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
 
   <!-- NAVIGATION BASSE (mobile-first) -->
   <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex z-30" style="padding-bottom: env(safe-area-inset-bottom);">
@@ -206,6 +244,9 @@
     <button data-tab="inventaire" class="tab-btn flex-1 py-3 text-stone-500 border-t-2 border-transparent flex flex-col items-center text-xs active">
       <span class="text-xl">🗄️</span>Inventaire
     </button>
+    <button data-tab="admin" class="tab-btn flex-1 py-3 text-stone-500 border-t-2 border-transparent flex flex-col items-center text-xs">
+      <span class="text-xl">🛠️</span>Admin
+    </button>
   </nav>
 
 <script>
@@ -214,6 +255,8 @@ const EXTERNAL_SCANNER_URL = 'https://syl20-20.github.io/cave-a-vin-scanner/scan
 
 // Code-barres reçu de scanner.html via ?barcode=XXXX (rempli côté serveur par doGet)
 const PRELOADED_BARCODE = "<?= barcodeParam ?>";
+const SHEET_URL = "<?= sheetUrl ?>";
+const ADMIN_PASSWORD = 'mcav'; // ⚠️ Mot de passe codé en dur — solution temporaire, non sécurisée à long terme
 
 let ALL_WINES = [];
 let hasInteracted = false; // devient true dès qu'une recherche ou un filtre est utilisé
@@ -452,14 +495,13 @@ function renderList() {
 
   let filtered = ALL_WINES.filter(w => {
     const total = (Number(w.QteCellier)||0)+(Number(w.QteLocker)||0)+(Number(w.QteFrigo)||0);
-    // Les bouteilles à quantité 0 restent toujours masquées de la liste (conservées dans le Sheet)
-    if (total === 0) return false;
 
     if (typeFilter && w.Type !== typeFilter) return false;
     if (paysFilter && (w.Pays || '').trim() !== paysFilter) return false;
 
+    // 'oui' -> seulement en stock ; 'non' -> seulement à quantité 0 ; '' (peu importe) -> toutes, sans distinction
     if (enStockFilter === 'oui' && total <= 0) return false;
-    if (enStockFilter === 'non' && total > 0) return false; // n'affichera jamais rien (qte=0 toujours masqué)
+    if (enStockFilter === 'non' && total > 0) return false;
 
     const prix = parseFloat(w.PrixSAQ);
     if (!isNaN(prixMin) && (isNaN(prix) || prix < prixMin)) return false;
@@ -476,10 +518,10 @@ function renderList() {
   }
 
   const rows = filtered.map(w => {
-    const prixTxt = w.PrixSAQ ? parseFloat(w.PrixSAQ).toFixed(2) + ' $' : '';
+    const prixTxt = w.PrixSAQ ? parseFloat(w.PrixSAQ).toFixed(2) + ' $' : '—';
     const wJson = JSON.stringify(w).replace(/'/g,"&apos;");
     return `
-    <tr class="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-stone-50" onclick='openQuickAdjust(${wJson})'>
+    <tr class="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-stone-50" onclick='openDetail(${wJson})'>
       <td class="p-2 font-medium">${w.Nom || 'Sans nom'}</td>
       <td class="p-2 text-stone-500">${w.Type || ''}</td>
       <td class="p-2 text-stone-500">${w.Pays || ''}</td>
@@ -488,10 +530,7 @@ function renderList() {
       <td class="p-2 text-center">${w.QteCellier||0}</td>
       <td class="p-2 text-center">${w.QteLocker||0}</td>
       <td class="p-2 text-center">${w.QteFrigo||0}</td>
-      <td class="p-2 text-right">
-        <button class="text-stone-400 hover:text-rose-800 text-base"
-          onclick='event.stopPropagation(); openForm(${wJson}, ${JSON.stringify(w.CodeBarre||'')}, null); showTab("form");'>✏️</button>
-      </td>
+      <td class="p-2 text-right text-stone-300">›</td>
     </tr>`;
   }).join('');
 
@@ -516,52 +555,104 @@ function renderList() {
     </div>`;
 }
 
-// ---------- MODALE : AJUSTEMENT RAPIDE ----------
-function openQuickAdjust(w) {
-  document.getElementById('quickModalTitle').textContent = w.Nom;
-  document.getElementById('quickModalBody').innerHTML = `
-    <div class="space-y-3">
-      ${['Cellier','Locker','Frigo'].map(loc => `
-        <div class="flex items-center justify-between bg-stone-50 rounded-xl p-3">
-          <span class="font-medium">${loc}</span>
-          <div class="flex items-center gap-3">
-            <button class="w-9 h-9 bg-stone-200 rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',-1)">−</button>
-            <span class="w-6 text-center font-semibold" id="qty_${loc}">${w['Qte'+loc]||0}</span>
-            <button class="w-9 h-9 bg-rose-800 text-white rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',1)">+</button>
-          </div>
-        </div>
-      `).join('')}
-      <div class="pt-2">
-        <button class="w-full bg-stone-200 rounded-xl py-2" onclick="editFromModal('${w.ID}')">✏️ Modifier / Noter</button>
+// ---------- ÉCRAN DE DÉTAIL (consultation) ----------
+let currentDetailWine = null;
+
+function openDetail(w) {
+  currentDetailWine = w;
+  document.getElementById('detailNom').textContent = w.Nom || 'Sans nom';
+  document.getElementById('detailSousTitre').textContent = `${w.Type || ''} · ${w.Pays || ''} · ${w.Format || ''}`.replace(/^ · | · $/g, '');
+  document.getElementById('detailProducteur').textContent = w.Producteur || '—';
+  document.getElementById('detailCepage').textContent = w.Cepage || '—';
+  document.getElementById('detailMillesime').textContent = w.Millesime || '—';
+  document.getElementById('detailPrix').textContent = w.PrixSAQ ? parseFloat(w.PrixSAQ).toFixed(2) + ' $' : '—';
+  document.getElementById('detailNote').textContent = w.Note ? w.Note + ' / 10' : '—';
+
+  const img = document.getElementById('detailImage');
+  if (w.ImageURL) { img.src = w.ImageURL; img.classList.remove('hidden'); }
+  else { img.classList.add('hidden'); }
+
+  const commentBox = document.getElementById('detailCommentaire');
+  if (w.Commentaire) { commentBox.textContent = w.Commentaire; commentBox.classList.remove('hidden'); }
+  else { commentBox.classList.add('hidden'); }
+
+  document.getElementById('detailQuantites').innerHTML = ['Cellier','Locker','Frigo'].map(loc => `
+    <div class="flex items-center justify-between bg-stone-50 rounded-xl p-3">
+      <span class="font-medium">${loc}</span>
+      <div class="flex items-center gap-3">
+        <button class="w-9 h-9 bg-stone-200 rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',-1)">−</button>
+        <span class="w-6 text-center font-semibold" id="qty_${loc}">${w['Qte'+loc]||0}</span>
+        <button class="w-9 h-9 bg-rose-800 text-white rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',1)">+</button>
       </div>
-    </div>`;
-  document.getElementById('quickModal').classList.remove('hidden');
-  window._currentModalWine = w;
+    </div>`).join('');
+
+  showTab('detail');
 }
-document.getElementById('quickModalClose').addEventListener('click', () => {
-  document.getElementById('quickModal').classList.add('hidden');
-  loadInventaire(); loadStats();
-});
 
 function quickAdjust(id, emplacement, delta) {
   google.script.run.withSuccessHandler(res => {
     if (res.success) {
       const loc = emplacement.replace('Qte','');
       document.getElementById('qty_' + loc).textContent = res.after;
+      if (currentDetailWine) currentDetailWine[emplacement] = res.after;
     }
   }).adjustQuantity(id, emplacement, delta, delta < 0 ? 'Consommation' : 'Ajout');
 }
 
-function editFromModal(id) {
-  const w = ALL_WINES.find(x => x.ID === id) || window._currentModalWine;
-  document.getElementById('quickModal').classList.add('hidden');
-  openForm(w, w.CodeBarre, null);
+document.getElementById('btnDetailEdit').addEventListener('click', () => {
+  if (!currentDetailWine) return;
+  openForm(currentDetailWine, currentDetailWine.CodeBarre, null);
   showTab('form');
+});
+
+// ---------- ADMIN ----------
+let adminUnlocked = false;
+
+document.getElementById('btnAdminLogin').addEventListener('click', () => {
+  const entered = document.getElementById('adminPassword').value;
+  if (entered === ADMIN_PASSWORD) {
+    adminUnlocked = true;
+    document.getElementById('adminLoginBox').classList.add('hidden');
+    document.getElementById('adminPanel').classList.remove('hidden');
+    document.getElementById('adminLoginError').classList.add('hidden');
+    renderAdminList();
+  } else {
+    document.getElementById('adminLoginError').classList.remove('hidden');
+  }
+});
+
+document.getElementById('adminSearch').addEventListener('input', renderAdminList);
+
+function renderAdminList() {
+  if (!adminUnlocked) return;
+  const q = document.getElementById('adminSearch').value.toLowerCase();
+  const list = document.getElementById('adminList');
+  const filtered = ALL_WINES.filter(w => !q || (w.Nom || '').toLowerCase().includes(q));
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<p class="text-center text-stone-400 py-4">Aucune bouteille trouvée.</p>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(w => `
+    <div class="flex items-center justify-between bg-stone-50 rounded-xl p-3">
+      <span class="text-sm truncate flex-1">${w.Nom || 'Sans nom'}</span>
+      <button class="text-red-600 text-sm font-medium ml-2" onclick="adminDeleteWine('${w.ID}', '${(w.Nom||'').replace(/'/g,"\\'")}')">🗑️ Supprimer</button>
+    </div>`).join('');
+}
+
+function adminDeleteWine(id, nom) {
+  if (!confirm('Supprimer définitivement "' + nom + '" de l\'inventaire ? Cette action est irréversible.')) return;
+  google.script.run.withSuccessHandler(() => {
+    loadInventaire(() => { renderAdminList(); });
+    loadStats();
+  }).deleteWine(id);
 }
 
 // ---------- INIT ----------
 window.addEventListener('load', () => {
   document.getElementById('externalScanLink').href = EXTERNAL_SCANNER_URL;
+  document.getElementById('adminSheetLink').href = SHEET_URL;
   loadStats();
 
   if (PRELOADED_BARCODE) {
