@@ -19,7 +19,12 @@
 
   <!-- HEADER -->
   <header class="bg-gradient-to-r from-rose-900 to-rose-800 text-white px-4 py-4 shadow-md sticky top-0 z-30">
-    <h1 class="text-xl font-bold flex items-center gap-2">🍷 Ma Cave à Vin</h1>
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-bold flex items-center gap-2 cursor-pointer" onclick="showTab('inventaire')">🍷 Ma Cave à Vin</h1>
+      <button onclick="showTab('inventaire')" class="text-xs bg-white/20 hover:bg-white/30 rounded-full px-3 py-1.5 flex items-center gap-1">
+        🏠 Accueil
+      </button>
+    </div>
     <div id="statsBar" class="text-xs opacity-90 mt-1">Chargement...</div>
   </header>
 
@@ -138,17 +143,43 @@
     <!-- ONGLET INVENTAIRE -->
     <section id="tab-inventaire" class="tab-content hidden">
       <div class="bg-white rounded-2xl shadow p-3 mb-4">
-        <input id="searchInput" type="text" placeholder="🔍 Rechercher (nom, type, pays, emplacement...)"
-          class="w-full border border-stone-300 rounded-xl px-3 py-2 mb-2">
-        <div class="flex gap-2 overflow-x-auto text-sm">
-          <button data-filter="all" class="filter-btn bg-rose-800 text-white px-3 py-1 rounded-full whitespace-nowrap">Tous</button>
-          <button data-filter="Rouge" class="filter-btn bg-stone-200 px-3 py-1 rounded-full whitespace-nowrap">Rouge</button>
-          <button data-filter="Blanc" class="filter-btn bg-stone-200 px-3 py-1 rounded-full whitespace-nowrap">Blanc</button>
-          <button data-filter="Rosé" class="filter-btn bg-stone-200 px-3 py-1 rounded-full whitespace-nowrap">Rosé</button>
-          <button data-filter="Mousseux" class="filter-btn bg-stone-200 px-3 py-1 rounded-full whitespace-nowrap">Mousseux</button>
+        <div class="flex gap-2 mb-2">
+          <input id="searchInput" type="text" placeholder="🔍 Rechercher (nom, type, pays, emplacement...)"
+            class="flex-1 border border-stone-300 rounded-xl px-3 py-2">
+          <button id="btnRefreshInventaire" title="Rafraîchir les données" class="bg-stone-100 border border-stone-300 rounded-xl px-3 text-lg">↻</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <label class="text-xs text-stone-500">Type
+            <select id="filterType" class="w-full border border-stone-300 rounded-xl px-2 py-2 mt-1 text-sm">
+              <option value="">Tous</option>
+              <option>Rouge</option><option>Blanc</option><option>Rosé</option>
+              <option>Mousseux</option><option>Fortifié</option><option>Autre</option>
+            </select>
+          </label>
+          <label class="text-xs text-stone-500">Pays
+            <select id="filterPays" class="w-full border border-stone-300 rounded-xl px-2 py-2 mt-1 text-sm">
+              <option value="">Tous</option>
+            </select>
+          </label>
+          <label class="text-xs text-stone-500">En stock
+            <select id="filterEnStock" class="w-full border border-stone-300 rounded-xl px-2 py-2 mt-1 text-sm">
+              <option value="">Peu importe</option>
+              <option value="oui">Oui</option>
+              <option value="non">Non</option>
+            </select>
+          </label>
+          <div class="text-xs text-stone-500">Prix ($)
+            <div class="flex gap-1 mt-1">
+              <input id="filterPrixMin" type="number" placeholder="Min" class="w-1/2 border border-stone-300 rounded-xl px-2 py-2 text-sm">
+              <input id="filterPrixMax" type="number" placeholder="Max" class="w-1/2 border border-stone-300 rounded-xl px-2 py-2 text-sm">
+            </div>
+          </div>
         </div>
       </div>
-      <div id="wineList" class="space-y-3"></div>
+      <div id="wineList" class="space-y-3">
+        <p class="text-center text-stone-400 py-6">Utilisez la recherche ou un filtre ci-dessus pour afficher vos bouteilles.</p>
+      </div>
     </section>
 
   </main>
@@ -185,7 +216,7 @@ const EXTERNAL_SCANNER_URL = 'https://syl20-20.github.io/cave-a-vin-scanner/scan
 const PRELOADED_BARCODE = "<?= barcodeParam ?>";
 
 let ALL_WINES = [];
-let currentFilter = 'all';
+let hasInteracted = false; // devient true dès qu'une recherche ou un filtre est utilisé
 let html5QrCode = null;
 let editingId = null;
 
@@ -277,8 +308,9 @@ function handleBarcodeDetected(barcode) {
   document.getElementById('scanStatus').textContent = 'Recherche dans l\'inventaire...';
   google.script.run.withSuccessHandler(existing => {
     if (existing) {
-      // Bouteille déjà connue -> ouvrir la fiche pour ajuster les quantités
-      openQuickAdjust(existing);
+      // Bouteille déjà connue -> ouvrir directement sa fiche en édition (pas de fenêtre intermédiaire)
+      openForm(existing, existing.CodeBarre, null);
+      showTab('form');
     } else {
       // Nouvelle bouteille -> interroger la SAQ puis ouvrir le formulaire
       document.getElementById('scanStatus').textContent = 'Recherche des infos sur SAQ.com...';
@@ -368,33 +400,71 @@ document.getElementById('wineForm').addEventListener('submit', (e) => {
 });
 
 // ---------- INVENTAIRE : LISTE + RECHERCHE ----------
-function loadInventaire() {
-  document.getElementById('wineList').innerHTML = '<p class="text-center text-stone-400 py-6">Chargement...</p>';
+function loadInventaire(callback) {
   google.script.run.withSuccessHandler(items => {
     ALL_WINES = items;
+    populatePaysFilter_();
     renderList();
+    if (callback) callback();
   }).getInventaire();
 }
 
-document.getElementById('searchInput').addEventListener('input', renderList);
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    currentFilter = btn.dataset.filter;
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('bg-rose-800','text-white'));
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.add('bg-stone-200'));
-    btn.classList.remove('bg-stone-200');
-    btn.classList.add('bg-rose-800','text-white');
-    renderList();
-  });
+function populatePaysFilter_() {
+  const select = document.getElementById('filterPays');
+  const current = select.value;
+  const paysSet = new Set(ALL_WINES.map(w => (w.Pays || '').trim()).filter(p => p));
+  const paysList = Array.from(paysSet).sort((a, b) => a.localeCompare(b));
+  select.innerHTML = '<option value="">Tous</option>' + paysList.map(p => `<option value="${p}">${p}</option>`).join('');
+  select.value = current || '';
+}
+
+function markInteractedAndRender() {
+  hasInteracted = true;
+  renderList();
+}
+
+document.getElementById('searchInput').addEventListener('input', markInteractedAndRender);
+document.getElementById('filterType').addEventListener('change', markInteractedAndRender);
+document.getElementById('filterPays').addEventListener('change', markInteractedAndRender);
+document.getElementById('filterEnStock').addEventListener('change', markInteractedAndRender);
+document.getElementById('filterPrixMin').addEventListener('input', markInteractedAndRender);
+document.getElementById('filterPrixMax').addEventListener('input', markInteractedAndRender);
+document.getElementById('btnRefreshInventaire').addEventListener('click', () => {
+  document.getElementById('wineList').innerHTML = '<p class="text-center text-stone-400 py-6">Actualisation...</p>';
+  loadInventaire();
+  loadStats();
 });
 
 function renderList() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
   const list = document.getElementById('wineList');
+
+  if (!hasInteracted) {
+    list.innerHTML = '<p class="text-center text-stone-400 py-6">Utilisez la recherche ou un filtre ci-dessus pour afficher vos bouteilles.</p>';
+    return;
+  }
+
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const typeFilter = document.getElementById('filterType').value;
+  const paysFilter = document.getElementById('filterPays').value;
+  const enStockFilter = document.getElementById('filterEnStock').value; // '', 'oui', 'non'
+  const prixMin = parseFloat(document.getElementById('filterPrixMin').value);
+  const prixMax = parseFloat(document.getElementById('filterPrixMax').value);
+
   let filtered = ALL_WINES.filter(w => {
     const total = (Number(w.QteCellier)||0)+(Number(w.QteLocker)||0)+(Number(w.QteFrigo)||0);
-    if (total === 0) return false; // masqué de la liste, mais conservé dans le Sheet
-    if (currentFilter !== 'all' && w.Type !== currentFilter) return false;
+    // Les bouteilles à quantité 0 restent toujours masquées de la liste (conservées dans le Sheet)
+    if (total === 0) return false;
+
+    if (typeFilter && w.Type !== typeFilter) return false;
+    if (paysFilter && (w.Pays || '').trim() !== paysFilter) return false;
+
+    if (enStockFilter === 'oui' && total <= 0) return false;
+    if (enStockFilter === 'non' && total > 0) return false; // n'affichera jamais rien (qte=0 toujours masqué)
+
+    const prix = parseFloat(w.PrixSAQ);
+    if (!isNaN(prixMin) && (isNaN(prix) || prix < prixMin)) return false;
+    if (!isNaN(prixMax) && (isNaN(prix) || prix > prixMax)) return false;
+
     if (!q) return true;
     const haystack = `${w.Nom} ${w.Type} ${w.Pays} ${w.Region} ${w.Producteur}`.toLowerCase();
     return haystack.includes(q);
@@ -406,96 +476,10 @@ function renderList() {
   }
 
   list.innerHTML = filtered.map(w => {
-    const total = (Number(w.QteCellier)||0)+(Number(w.QteLocker)||0)+(Number(w.QteFrigo)||0);
-    const stars = w.Note ? `⭐ ${w.Note}/10` : '';
+    const prixTxt = w.PrixSAQ ? parseFloat(w.PrixSAQ).toFixed(2) + ' $' : '';
     return `
     <div class="bg-white rounded-2xl shadow p-3 flex gap-3" onclick='openQuickAdjust(${JSON.stringify(w).replace(/'/g,"&apos;")})'>
       ${w.ImageURL ? `<img src="${w.ImageURL}" class="w-16 h-16 object-contain rounded-lg bg-stone-50 flex-shrink-0">` : `<div class="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0">🍷</div>`}
       <div class="flex-1 min-w-0">
         <p class="font-semibold truncate">${w.Nom || 'Sans nom'}</p>
-        <p class="text-xs text-stone-500">${w.Type || ''} · ${w.Pays || ''} ${w.Millesime ? '· ' + w.Millesime : ''}</p>
-        <p class="text-xs text-stone-400 mt-1">${stars}</p>
-        <div class="flex gap-2 mt-1 text-xs">
-          <span class="bg-stone-100 px-2 py-0.5 rounded-full">Cellier: ${w.QteCellier||0}</span>
-          <span class="bg-stone-100 px-2 py-0.5 rounded-full">Locker: ${w.QteLocker||0}</span>
-          <span class="bg-stone-100 px-2 py-0.5 rounded-full">Frigo: ${w.QteFrigo||0}</span>
-        </div>
-      </div>
-      <div class="text-right flex-shrink-0">
-        <p class="text-lg font-bold ${total===0 ? 'text-red-400':'text-rose-800'}">${total}</p>
-        <p class="text-[10px] text-stone-400">total</p>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// ---------- MODALE : AJUSTEMENT RAPIDE ----------
-function openQuickAdjust(w) {
-  document.getElementById('quickModalTitle').textContent = w.Nom;
-  document.getElementById('quickModalBody').innerHTML = `
-    <div class="space-y-3">
-      ${['Cellier','Locker','Frigo'].map(loc => `
-        <div class="flex items-center justify-between bg-stone-50 rounded-xl p-3">
-          <span class="font-medium">${loc}</span>
-          <div class="flex items-center gap-3">
-            <button class="w-9 h-9 bg-stone-200 rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',-1)">−</button>
-            <span class="w-6 text-center font-semibold" id="qty_${loc}">${w['Qte'+loc]||0}</span>
-            <button class="w-9 h-9 bg-rose-800 text-white rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',1)">+</button>
-          </div>
-        </div>
-      `).join('')}
-      <div class="flex gap-2 pt-2">
-        <button class="flex-1 bg-stone-200 rounded-xl py-2" onclick="editFromModal('${w.ID}')">✏️ Modifier / Noter</button>
-        <button class="flex-1 bg-red-100 text-red-700 rounded-xl py-2" onclick="deleteFromModal('${w.ID}')">🗑️ Supprimer</button>
-      </div>
-    </div>`;
-  document.getElementById('quickModal').classList.remove('hidden');
-  window._currentModalWine = w;
-}
-document.getElementById('quickModalClose').addEventListener('click', () => {
-  document.getElementById('quickModal').classList.add('hidden');
-  loadInventaire(); loadStats();
-});
-
-function quickAdjust(id, emplacement, delta) {
-  google.script.run.withSuccessHandler(res => {
-    if (res.success) {
-      const loc = emplacement.replace('Qte','');
-      document.getElementById('qty_' + loc).textContent = res.after;
-    }
-  }).adjustQuantity(id, emplacement, delta, delta < 0 ? 'Consommation' : 'Ajout');
-}
-
-function editFromModal(id) {
-  const w = ALL_WINES.find(x => x.ID === id) || window._currentModalWine;
-  document.getElementById('quickModal').classList.add('hidden');
-  openForm(w, w.CodeBarre, null);
-  showTab('form');
-}
-
-function deleteFromModal(id) {
-  if (!confirm('Supprimer définitivement cette bouteille de l\'inventaire ?')) return;
-  google.script.run.withSuccessHandler(() => {
-    document.getElementById('quickModal').classList.add('hidden');
-    loadInventaire(); loadStats();
-  }).deleteWine(id);
-}
-
-// ---------- INIT ----------
-window.addEventListener('load', () => {
-  document.getElementById('externalScanLink').href = EXTERNAL_SCANNER_URL;
-  loadStats();
-
-  if (PRELOADED_BARCODE) {
-    // Un code-barres a été transmis par scanner.html (GitHub Pages) -> on le traite directement
-    document.getElementById('scanStatus').textContent = 'Code reçu : ' + PRELOADED_BARCODE;
-    showTab('scan');
-    handleBarcodeDetected(PRELOADED_BARCODE);
-  } else {
-    showTab('inventaire');
-  }
-  loadInventaire();
-});
-</script>
-</body>
-</html>
+        <p class="text-xs text-stone-500">${w.
