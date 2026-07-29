@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ma Cave à Vin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
+  .tab-btn.active { color: #7c2d3e; border-color: #7c2d3e; }
+  .star { cursor: pointer; }
+  #reader video { border-radius: 0.75rem; }
+  ::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body class="bg-stone-100 text-stone-800 font-sans min-h-screen pb-24">
+
+  <!-- HEADER -->
+  <header class="bg-gradient-to-r from-rose-900 to-rose-800 text-white px-4 py-4 shadow-md sticky top-0 z-30">
+    <h1 class="text-xl font-bold flex items-center gap-2">🍷 Ma Cave à Vin</h1>
+    <div id="statsBar" class="text-xs opacity-90 mt-1">Chargement...</div>
+  </header>
+
+  <!-- CONTENU DES ONGLETS -->
+  <main class="p-3 max-w-lg mx-auto">
+
+    <!-- ONGLET SCANNER -->
+    <section id="tab-scan" class="tab-content">
+      <div class="bg-white rounded-2xl shadow p-4 mb-4">
+        <h2 class="font-semibold mb-3">Scanner une bouteille</h2>
+        <div id="reader" class="w-full rounded-xl overflow-hidden bg-black" style="min-height:250px;"></div>
+        <div class="flex gap-2 mt-3">
+          <button id="btnStartScan" class="flex-1 bg-rose-800 text-white rounded-xl py-3 font-medium active:scale-95 transition">📷 Démarrer le scan</button>
+          <button id="btnStopScan" class="hidden flex-1 bg-stone-300 text-stone-700 rounded-xl py-3 font-medium">Arrêter</button>
+        </div>
+        <p class="text-xs text-stone-400 mt-2">
+          La caméra ne fonctionne pas ici ? Utilisez le
+          <a id="externalScanLink" href="#" target="_blank" class="text-rose-800 underline font-medium">scanner externe</a>
+          (s'ouvre hors de l'app, sans restriction caméra).
+        </p>
+        <div class="mt-3">
+          <label class="text-sm text-stone-500">Ou saisir le code-barres manuellement :</label>
+          <div class="flex gap-2 mt-1">
+            <input id="manualBarcode" type="text" inputmode="numeric" placeholder="Ex: 0067900123456"
+              class="flex-1 border border-stone-300 rounded-xl px-3 py-2">
+            <button id="btnManualLookup" class="bg-stone-800 text-white rounded-xl px-4">OK</button>
+          </div>
+        </div>
+        <div id="scanStatus" class="text-sm text-stone-500 mt-2"></div>
+      </div>
+    </section>
+
+    <!-- ONGLET FORMULAIRE AJOUT/EDITION -->
+    <section id="tab-form" class="tab-content hidden">
+      <div class="bg-white rounded-2xl shadow p-4 mb-4">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="font-semibold" id="formTitle">Ajouter une bouteille</h2>
+          <span id="saqBadge" class="hidden text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Auto-rempli SAQ</span>
+        </div>
+
+        <img id="formImage" class="hidden w-24 h-24 object-contain mx-auto mb-3 rounded-lg bg-stone-50" />
+
+        <form id="wineForm" class="grid grid-cols-2 gap-2">
+          <input type="hidden" id="f_id">
+          <input type="hidden" id="f_barcode">
+
+          <label class="col-span-2 text-sm text-stone-500">Nom *
+            <input id="f_nom" required class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="text-sm text-stone-500">Producteur
+            <input id="f_producteur" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="text-sm text-stone-500">Type
+            <select id="f_type" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+              <option>Rouge</option><option>Blanc</option><option>Rosé</option>
+              <option>Mousseux</option><option>Fortifié</option><option>Autre</option>
+            </select>
+          </label>
+
+          <label class="text-sm text-stone-500">Pays
+            <input id="f_pays" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="text-sm text-stone-500">Région
+            <input id="f_region" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="col-span-2 text-sm text-stone-500">Cépage
+            <input id="f_cepage" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="text-sm text-stone-500">Millésime
+            <input id="f_millesime" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="text-sm text-stone-500">Format
+            <input id="f_format" value="750 ml" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="text-sm text-stone-500">Prix SAQ ($)
+            <input id="f_prix" type="number" step="0.01" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="text-sm text-stone-500">Note (/10)
+            <input id="f_note" type="number" min="0" max="10" step="0.5" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+          </label>
+
+          <label class="col-span-2 text-sm text-stone-500">Commentaire de dégustation
+            <textarea id="f_commentaire" rows="3" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1"></textarea>
+          </label>
+
+          <div class="col-span-2 grid grid-cols-3 gap-2 mt-2">
+            <label class="text-sm text-stone-500 text-center">Cellier
+              <input id="f_qte_cellier" type="number" min="0" value="0" class="w-full border border-stone-300 rounded-xl px-2 py-2 mt-1 text-center">
+            </label>
+            <label class="text-sm text-stone-500 text-center">Locker
+              <input id="f_qte_locker" type="number" min="0" value="0" class="w-full border border-stone-300 rounded-xl px-2 py-2 mt-1 text-center">
+            </label>
+            <label class="text-sm text-stone-500 text-center">Frigo
+              <input id="f_qte_frigo" type="number" min="0" value="0" class="w-full border border-stone-300 rounded-xl px-2 py-2 mt-1 text-center">
+            </label>
+          </div>
+
+          <button type="submit" class="col-span-2 bg-rose-800 text-white rounded-xl py-3 font-medium mt-3 active:scale-95 transition">
+            💾 Enregistrer
+          </button>
+          <button type="button" id="btnCancelForm" class="col-span-2 bg-stone-200 text-stone-700 rounded-xl py-2 -mt-1">
+            Annuler
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ONGLET INVENTAIRE -->
+    <section id="tab-inventaire" class="tab-content hidden">
+      <div class="bg-white rounded-2xl shadow p-3 mb-4">
+        <input id="searchInput" type="text" placeholder="🔍 Rechercher (nom, type, pays, emplacement...)"
+          class="w-full border border-stone-300 rounded-xl px-3 py-2 mb-2">
+        <div class="flex gap-2 overflow-x-auto text-sm">
+          <button data-filter="all" class="filter-btn bg-rose-800 text-white px-3 py-1 rounded-full whitespace-nowrap">Tous</button>
+          <button data-filter="Rouge" class="filter-btn bg-stone-200 px-3 py-1 rounded-full whitespace-nowrap">Rouge</button>
+          <button data-filter="Blanc" class="filter-btn bg-stone-200 px-3 py-1 rounded-full whitespace-nowrap">Blanc</button>
+          <button data-filter="Rosé" class="filter-btn bg-stone-200 px-3 py-1 rounded-full whitespace-nowrap">Rosé</button>
+          <button data-filter="Mousseux" class="filter-btn bg-stone-200 px-3 py-1 rounded-full whitespace-nowrap">Mousseux</button>
+        </div>
+      </div>
+      <div id="wineList" class="space-y-3"></div>
+    </section>
+
+  </main>
+
+  <!-- MODALE : AJUSTEMENT RAPIDE -->
+  <div id="quickModal" class="hidden fixed inset-0 bg-black/50 z-40 flex items-end">
+    <div class="bg-white w-full rounded-t-2xl p-4 max-h-[80vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-3">
+        <h3 id="quickModalTitle" class="font-semibold text-lg"></h3>
+        <button id="quickModalClose" class="text-stone-400 text-2xl leading-none">&times;</button>
+      </div>
+      <div id="quickModalBody"></div>
+    </div>
+  </div>
+
+  <!-- NAVIGATION BASSE (mobile-first) -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex z-30" style="padding-bottom: env(safe-area-inset-bottom);">
+    <button data-tab="scan" class="tab-btn flex-1 py-3 text-stone-500 border-t-2 border-transparent flex flex-col items-center text-xs">
+      <span class="text-xl">📷</span>Scanner
+    </button>
+    <button data-tab="form" class="tab-btn flex-1 py-3 text-stone-500 border-t-2 border-transparent flex flex-col items-center text-xs">
+      <span class="text-xl">➕</span>Ajouter
+    </button>
+    <button data-tab="inventaire" class="tab-btn flex-1 py-3 text-stone-500 border-t-2 border-transparent flex flex-col items-center text-xs active">
+      <span class="text-xl">🗄️</span>Inventaire
+    </button>
+  </nav>
+
+<script>
+// ⚠️ REMPLACEZ par l'URL de votre page scanner.html hébergée sur GitHub Pages
+const EXTERNAL_SCANNER_URL = 'https://syl20-20.github.io/cave-a-vin-scanner/scanner.html';
+
+// Code-barres reçu de scanner.html via ?barcode=XXXX (rempli côté serveur par doGet)
+const PRELOADED_BARCODE = "<?= barcodeParam ?>";
+
+let ALL_WINES = [];
+let currentFilter = 'all';
+let html5QrCode = null;
+let editingId = null;
+
+// ---------- NAVIGATION ----------
+function showTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById('tab-' + tab).classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  if (tab !== 'scan' && html5QrCode) stopScanner();
+  if (tab === 'inventaire') loadInventaire();
+}
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => showTab(btn.dataset.tab));
+});
+
+// ---------- STATS ----------
+function loadStats() {
+  google.script.run.withSuccessHandler(stats => {
+    document.getElementById('statsBar').textContent =
+      `${stats.totalBouteilles} bouteilles · Cellier: ${stats.totalCellier} · Locker: ${stats.totalLocker} · Frigo: ${stats.totalFrigo}`;
+  }).getStats();
+}
+
+// ---------- SCANNER ----------
+document.getElementById('btnStartScan').addEventListener('click', startScanner);
+document.getElementById('btnStopScan').addEventListener('click', stopScanner);
+document.getElementById('btnManualLookup').addEventListener('click', () => {
+  const code = document.getElementById('manualBarcode').value.trim();
+  if (code) handleBarcodeDetected(code);
+});
+
+function startScanner() {
+  const statusEl = document.getElementById('scanStatus');
+  statusEl.textContent = 'Initialisation de la caméra...';
+  html5QrCode = new Html5Qrcode("reader");
+  Html5Qrcode.getCameras().then(cameras => {
+    if (!cameras || cameras.length === 0) {
+      statusEl.textContent = "Aucune caméra détectée.";
+      return;
+    }
+    // Préférence pour la caméra arrière sur iPhone
+    const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+    html5QrCode.start(
+      backCam.id,
+      {
+        fps: 10,
+        qrbox: { width: 280, height: 180 },
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128
+        ]
+      },
+      (decodedText) => {
+        statusEl.textContent = 'Code détecté : ' + decodedText;
+        handleBarcodeDetected(decodedText);
+        stopScanner();
+      },
+      () => { /* erreurs de scan ignorées en continu */ }
+    ).then(() => {
+      document.getElementById('btnStartScan').classList.add('hidden');
+      document.getElementById('btnStopScan').classList.remove('hidden');
+      statusEl.textContent = 'Visez le code-barres...';
+    }).catch(err => {
+      statusEl.textContent = "Erreur d'accès caméra : " + err;
+    });
+  }).catch(err => {
+    statusEl.textContent = "Permission caméra refusée ou indisponible : " + err;
+  });
+}
+
+function stopScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      html5QrCode = null;
+    }).catch(() => {});
+  }
+  document.getElementById('btnStartScan').classList.remove('hidden');
+  document.getElementById('btnStopScan').classList.add('hidden');
+}
+
+// ---------- LOGIQUE : CODE-BARRES SCANNÉ OU SAISI ----------
+function handleBarcodeDetected(barcode) {
+  document.getElementById('scanStatus').textContent = 'Recherche dans l\'inventaire...';
+  google.script.run.withSuccessHandler(existing => {
+    if (existing) {
+      // Bouteille déjà connue -> ouvrir la fiche pour ajuster les quantités
+      openQuickAdjust(existing);
+    } else {
+      // Nouvelle bouteille -> interroger la SAQ puis ouvrir le formulaire
+      document.getElementById('scanStatus').textContent = 'Recherche des infos sur SAQ.com...';
+      google.script.run.withSuccessHandler(res => {
+        openForm(null, barcode, res && res.success ? res.data : null);
+        showTab('form');
+      }).fetchSAQData(barcode);
+    }
+  }).findByBarcode(barcode);
+}
+
+// ---------- FORMULAIRE AJOUT / EDITION ----------
+function openForm(existingWine, barcode, saqData) {
+  editingId = existingWine ? existingWine.ID : null;
+  document.getElementById('formTitle').textContent = existingWine ? 'Modifier la bouteille' : 'Ajouter une bouteille';
+  document.getElementById('f_id').value = editingId || '';
+  document.getElementById('f_barcode').value = barcode || (existingWine ? existingWine.CodeBarre : '');
+
+  const src = existingWine || saqData || {};
+  document.getElementById('f_nom').value = src.Nom || '';
+  document.getElementById('f_producteur').value = src.Producteur || '';
+  document.getElementById('f_type').value = src.Type || 'Rouge';
+  document.getElementById('f_pays').value = src.Pays || '';
+  document.getElementById('f_region').value = src.Region || '';
+  document.getElementById('f_cepage').value = src.Cepage || '';
+  document.getElementById('f_millesime').value = src.Millesime || '';
+  document.getElementById('f_format').value = src.Format || '750 ml';
+  document.getElementById('f_prix').value = src.PrixSAQ || '';
+  document.getElementById('f_note').value = src.Note || '';
+  document.getElementById('f_commentaire').value = src.Commentaire || '';
+  document.getElementById('f_qte_cellier').value = src.QteCellier || 0;
+  document.getElementById('f_qte_locker').value = src.QteLocker || 0;
+  document.getElementById('f_qte_frigo').value = src.QteFrigo || 0;
+
+  const img = document.getElementById('formImage');
+  if (src.ImageURL) { img.src = src.ImageURL; img.classList.remove('hidden'); }
+  else { img.classList.add('hidden'); }
+
+  document.getElementById('saqBadge').classList.toggle('hidden', !saqData);
+}
+
+document.getElementById('btnCancelForm').addEventListener('click', () => {
+  document.getElementById('wineForm').reset();
+  editingId = null;
+  showTab('inventaire');
+});
+
+document.getElementById('wineForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const wine = {
+    CodeBarre: document.getElementById('f_barcode').value,
+    Nom: document.getElementById('f_nom').value,
+    Producteur: document.getElementById('f_producteur').value,
+    Type: document.getElementById('f_type').value,
+    Pays: document.getElementById('f_pays').value,
+    Region: document.getElementById('f_region').value,
+    Cepage: document.getElementById('f_cepage').value,
+    Millesime: document.getElementById('f_millesime').value,
+    Format: document.getElementById('f_format').value,
+    PrixSAQ: document.getElementById('f_prix').value,
+    Note: document.getElementById('f_note').value,
+    Commentaire: document.getElementById('f_commentaire').value,
+    QteCellier: document.getElementById('f_qte_cellier').value,
+    QteLocker: document.getElementById('f_qte_locker').value,
+    QteFrigo: document.getElementById('f_qte_frigo').value
+  };
+
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true; btn.textContent = 'Enregistrement...';
+
+  const done = () => {
+    btn.disabled = false; btn.textContent = '💾 Enregistrer';
+    document.getElementById('wineForm').reset();
+    editingId = null;
+    loadStats();
+    showTab('inventaire');
+  };
+
+  if (editingId) {
+    google.script.run.withSuccessHandler(done).updateWine(editingId, wine);
+  } else {
+    google.script.run.withSuccessHandler(done).addWine(wine);
+  }
+});
+
+// ---------- INVENTAIRE : LISTE + RECHERCHE ----------
+function loadInventaire() {
+  document.getElementById('wineList').innerHTML = '<p class="text-center text-stone-400 py-6">Chargement...</p>';
+  google.script.run.withSuccessHandler(items => {
+    ALL_WINES = items;
+    renderList();
+  }).getInventaire();
+}
+
+document.getElementById('searchInput').addEventListener('input', renderList);
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentFilter = btn.dataset.filter;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('bg-rose-800','text-white'));
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.add('bg-stone-200'));
+    btn.classList.remove('bg-stone-200');
+    btn.classList.add('bg-rose-800','text-white');
+    renderList();
+  });
+});
+
+function renderList() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const list = document.getElementById('wineList');
+  let filtered = ALL_WINES.filter(w => {
+    if (currentFilter !== 'all' && w.Type !== currentFilter) return false;
+    if (!q) return true;
+    const haystack = `${w.Nom} ${w.Type} ${w.Pays} ${w.Region} ${w.Producteur}`.toLowerCase();
+    return haystack.includes(q);
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<p class="text-center text-stone-400 py-6">Aucune bouteille trouvée.</p>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(w => {
+    const total = (Number(w.QteCellier)||0)+(Number(w.QteLocker)||0)+(Number(w.QteFrigo)||0);
+    const stars = w.Note ? `⭐ ${w.Note}/10` : '';
+    return `
+    <div class="bg-white rounded-2xl shadow p-3 flex gap-3" onclick='openQuickAdjust(${JSON.stringify(w).replace(/'/g,"&apos;")})'>
+      ${w.ImageURL ? `<img src="${w.ImageURL}" class="w-16 h-16 object-contain rounded-lg bg-stone-50 flex-shrink-0">` : `<div class="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0">🍷</div>`}
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold truncate">${w.Nom || 'Sans nom'}</p>
+        <p class="text-xs text-stone-500">${w.Type || ''} · ${w.Pays || ''} ${w.Millesime ? '· ' + w.Millesime : ''}</p>
+        <p class="text-xs text-stone-400 mt-1">${stars}</p>
+        <div class="flex gap-2 mt-1 text-xs">
+          <span class="bg-stone-100 px-2 py-0.5 rounded-full">Cellier: ${w.QteCellier||0}</span>
+          <span class="bg-stone-100 px-2 py-0.5 rounded-full">Locker: ${w.QteLocker||0}</span>
+          <span class="bg-stone-100 px-2 py-0.5 rounded-full">Frigo: ${w.QteFrigo||0}</span>
+        </div>
+      </div>
+      <div class="text-right flex-shrink-0">
+        <p class="text-lg font-bold ${total===0 ? 'text-red-400':'text-rose-800'}">${total}</p>
+        <p class="text-[10px] text-stone-400">total</p>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- MODALE : AJUSTEMENT RAPIDE ----------
+function openQuickAdjust(w) {
+  document.getElementById('quickModalTitle').textContent = w.Nom;
+  document.getElementById('quickModalBody').innerHTML = `
+    <div class="space-y-3">
+      ${['Cellier','Locker','Frigo'].map(loc => `
+        <div class="flex items-center justify-between bg-stone-50 rounded-xl p-3">
+          <span class="font-medium">${loc}</span>
+          <div class="flex items-center gap-3">
+            <button class="w-9 h-9 bg-stone-200 rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',-1)">−</button>
+            <span class="w-6 text-center font-semibold" id="qty_${loc}">${w['Qte'+loc]||0}</span>
+            <button class="w-9 h-9 bg-rose-800 text-white rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',1)">+</button>
+          </div>
+        </div>
+      `).join('')}
+      <div class="flex gap-2 pt-2">
+        <button class="flex-1 bg-stone-200 rounded-xl py-2" onclick="editFromModal('${w.ID}')">✏️ Modifier / Noter</button>
+        <button class="flex-1 bg-red-100 text-red-700 rounded-xl py-2" onclick="deleteFromModal('${w.ID}')">🗑️ Supprimer</button>
+      </div>
+    </div>`;
+  document.getElementById('quickModal').classList.remove('hidden');
+  window._currentModalWine = w;
+}
+document.getElementById('quickModalClose').addEventListener('click', () => {
+  document.getElementById('quickModal').classList.add('hidden');
+  loadInventaire(); loadStats();
+});
+
+function quickAdjust(id, emplacement, delta) {
+  google.script.run.withSuccessHandler(res => {
+    if (res.success) {
+      const loc = emplacement.replace('Qte','');
+      document.getElementById('qty_' + loc).textContent = res.after;
+    }
+  }).adjustQuantity(id, emplacement, delta, delta < 0 ? 'Consommation' : 'Ajout');
+}
+
+function editFromModal(id) {
+  const w = ALL_WINES.find(x => x.ID === id) || window._currentModalWine;
+  document.getElementById('quickModal').classList.add('hidden');
+  openForm(w, w.CodeBarre, null);
+  showTab('form');
+}
+
+function deleteFromModal(id) {
+  if (!confirm('Supprimer définitivement cette bouteille de l\'inventaire ?')) return;
+  google.script.run.withSuccessHandler(() => {
+    document.getElementById('quickModal').classList.add('hidden');
+    loadInventaire(); loadStats();
+  }).deleteWine(id);
+}
+
+// ---------- INIT ----------
+window.addEventListener('load', () => {
+  document.getElementById('externalScanLink').href = EXTERNAL_SCANNER_URL;
+  loadStats();
+
+  if (PRELOADED_BARCODE) {
+    // Un code-barres a été transmis par scanner.html (GitHub Pages) -> on le traite directement
+    document.getElementById('scanStatus').textContent = 'Code reçu : ' + PRELOADED_BARCODE;
+    showTab('scan');
+    handleBarcodeDetected(PRELOADED_BARCODE);
+  } else {
+    showTab('inventaire');
+  }
+  loadInventaire();
+});
+</script>
+</body>
+</html>
