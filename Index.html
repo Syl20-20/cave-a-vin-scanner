@@ -177,7 +177,7 @@
           </div>
         </div>
       </div>
-      <div id="wineList" class="space-y-3">
+      <div id="wineList" class="bg-white rounded-2xl shadow overflow-x-auto">
         <p class="text-center text-stone-400 py-6">Utilisez la recherche ou un filtre ci-dessus pour afficher vos bouteilles.</p>
       </div>
     </section>
@@ -475,11 +475,105 @@ function renderList() {
     return;
   }
 
-  list.innerHTML = filtered.map(w => {
+  const rows = filtered.map(w => {
     const prixTxt = w.PrixSAQ ? parseFloat(w.PrixSAQ).toFixed(2) + ' $' : '';
+    const wJson = JSON.stringify(w).replace(/'/g,"&apos;");
     return `
-    <div class="bg-white rounded-2xl shadow p-3 flex gap-3" onclick='openQuickAdjust(${JSON.stringify(w).replace(/'/g,"&apos;")})'>
-      ${w.ImageURL ? `<img src="${w.ImageURL}" class="w-16 h-16 object-contain rounded-lg bg-stone-50 flex-shrink-0">` : `<div class="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0">🍷</div>`}
-      <div class="flex-1 min-w-0">
-        <p class="font-semibold truncate">${w.Nom || 'Sans nom'}</p>
-        <p class="text-xs text-stone-500">${w.
+    <tr class="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-stone-50" onclick='openQuickAdjust(${wJson})'>
+      <td class="p-2 font-medium">${w.Nom || 'Sans nom'}</td>
+      <td class="p-2 text-stone-500">${w.Type || ''}</td>
+      <td class="p-2 text-stone-500">${w.Pays || ''}</td>
+      <td class="p-2 text-stone-500 whitespace-nowrap">${w.Format || ''}</td>
+      <td class="p-2 whitespace-nowrap">${prixTxt}</td>
+      <td class="p-2 text-center">${w.QteCellier||0}</td>
+      <td class="p-2 text-center">${w.QteLocker||0}</td>
+      <td class="p-2 text-center">${w.QteFrigo||0}</td>
+      <td class="p-2 text-right">
+        <button class="text-stone-400 hover:text-rose-800 text-base"
+          onclick='event.stopPropagation(); openForm(${wJson}, ${JSON.stringify(w.CodeBarre||'')}, null); showTab("form");'>✏️</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  list.innerHTML = `
+    <div class="bg-white rounded-2xl shadow overflow-x-auto">
+      <table class="w-full text-xs sm:text-sm">
+        <thead>
+          <tr class="text-left text-stone-500 border-b border-stone-200 bg-stone-50">
+            <th class="p-2 font-medium">Nom</th>
+            <th class="p-2 font-medium">Type</th>
+            <th class="p-2 font-medium">Pays</th>
+            <th class="p-2 font-medium">Format</th>
+            <th class="p-2 font-medium">Prix</th>
+            <th class="p-2 font-medium text-center">Cellier</th>
+            <th class="p-2 font-medium text-center">Locker</th>
+            <th class="p-2 font-medium text-center">Frigo</th>
+            <th class="p-2"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ---------- MODALE : AJUSTEMENT RAPIDE ----------
+function openQuickAdjust(w) {
+  document.getElementById('quickModalTitle').textContent = w.Nom;
+  document.getElementById('quickModalBody').innerHTML = `
+    <div class="space-y-3">
+      ${['Cellier','Locker','Frigo'].map(loc => `
+        <div class="flex items-center justify-between bg-stone-50 rounded-xl p-3">
+          <span class="font-medium">${loc}</span>
+          <div class="flex items-center gap-3">
+            <button class="w-9 h-9 bg-stone-200 rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',-1)">−</button>
+            <span class="w-6 text-center font-semibold" id="qty_${loc}">${w['Qte'+loc]||0}</span>
+            <button class="w-9 h-9 bg-rose-800 text-white rounded-full font-bold" onclick="quickAdjust('${w.ID}','Qte${loc}',1)">+</button>
+          </div>
+        </div>
+      `).join('')}
+      <div class="pt-2">
+        <button class="w-full bg-stone-200 rounded-xl py-2" onclick="editFromModal('${w.ID}')">✏️ Modifier / Noter</button>
+      </div>
+    </div>`;
+  document.getElementById('quickModal').classList.remove('hidden');
+  window._currentModalWine = w;
+}
+document.getElementById('quickModalClose').addEventListener('click', () => {
+  document.getElementById('quickModal').classList.add('hidden');
+  loadInventaire(); loadStats();
+});
+
+function quickAdjust(id, emplacement, delta) {
+  google.script.run.withSuccessHandler(res => {
+    if (res.success) {
+      const loc = emplacement.replace('Qte','');
+      document.getElementById('qty_' + loc).textContent = res.after;
+    }
+  }).adjustQuantity(id, emplacement, delta, delta < 0 ? 'Consommation' : 'Ajout');
+}
+
+function editFromModal(id) {
+  const w = ALL_WINES.find(x => x.ID === id) || window._currentModalWine;
+  document.getElementById('quickModal').classList.add('hidden');
+  openForm(w, w.CodeBarre, null);
+  showTab('form');
+}
+
+// ---------- INIT ----------
+window.addEventListener('load', () => {
+  document.getElementById('externalScanLink').href = EXTERNAL_SCANNER_URL;
+  loadStats();
+
+  if (PRELOADED_BARCODE) {
+    // Un code-barres a été transmis par scanner.html (GitHub Pages) -> on le traite directement
+    document.getElementById('scanStatus').textContent = 'Code reçu : ' + PRELOADED_BARCODE;
+    showTab('scan');
+    handleBarcodeDetected(PRELOADED_BARCODE);
+  } else {
+    showTab('inventaire');
+  }
+  loadInventaire();
+});
+</script>
+</body>
+</html>
