@@ -349,11 +349,14 @@ document.getElementById('wineForm').addEventListener('submit', (e) => {
   const btn = e.target.querySelector('button[type=submit]');
   btn.disabled = true; btn.textContent = 'Enregistrement...';
 
-  const done = () => {
+  const done = (res) => {
     btn.disabled = false; btn.textContent = '💾 Enregistrer';
     document.getElementById('wineForm').reset();
     editingId = null;
     loadStats();
+    if (res && res.updated) {
+      document.getElementById('scanStatus').textContent = 'Ce vin existait déjà : sa fiche a été mise à jour (pas de doublon créé).';
+    }
     showTab('inventaire');
   };
 
@@ -389,6 +392,8 @@ function renderList() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   const list = document.getElementById('wineList');
   let filtered = ALL_WINES.filter(w => {
+    const total = (Number(w.QteCellier)||0)+(Number(w.QteLocker)||0)+(Number(w.QteFrigo)||0);
+    if (total === 0) return false; // masqué de la liste, mais conservé dans le Sheet
     if (currentFilter !== 'all' && w.Type !== currentFilter) return false;
     if (!q) return true;
     const haystack = `${w.Nom} ${w.Type} ${w.Pays} ${w.Region} ${w.Producteur}`.toLowerCase();
