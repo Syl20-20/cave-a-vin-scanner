@@ -143,6 +143,16 @@ function findByBarcode(barcode) {
  *          QteCellier, QteLocker, QteFrigo, Note, Commentaire }
  */
 function addWine(wine) {
+  // Vérification anti-doublon : si ce code-barres existe déjà, on met à jour
+  // la fiche existante au lieu de créer un nouvel enregistrement.
+  if (wine.CodeBarre) {
+    const existing = findByBarcode(wine.CodeBarre);
+    if (existing) {
+      const updateResult = updateWine(existing.ID, wine);
+      return { success: updateResult.success, id: existing.ID, updated: true, error: updateResult.error };
+    }
+  }
+
   const sheet = getSheet_(SHEET_INVENTAIRE);
   const id = generateId_();
   const now = nowIso_();
