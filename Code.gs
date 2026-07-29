@@ -65,6 +65,7 @@ function doGet(e) {
   // Récupère un éventuel code-barres passé en paramètre d'URL
   // (utilisé par la page scanner.html hébergée sur GitHub Pages, hors iframe Apps Script)
   template.barcodeParam = (e && e.parameter && e.parameter.barcode) ? e.parameter.barcode : '';
+  template.sheetUrl = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit';
 
   return template.evaluate()
     .setTitle('Ma Cave à Vin')
@@ -571,10 +572,13 @@ function parseSaqProductHtml_(html, url) {
   // avec des libellés du type "Pays", "Région", "Cépage", "Couleur", "Millésime"
   result.Pays = extractLabelValue_(html, ['Pays']);
   result.Region = extractLabelValue_(html, ['Région', 'Region']);
-  result.Cepage = extractLabelValue_(html, ['Cépage', 'Cépages']);
+  result.Cepage = extractLabelValue_(html, ['Cépages', 'Cépage']);
   result.Type = extractLabelValue_(html, ['Couleur', 'Type de produit', 'Type']);
   result.Millesime = extractLabelValue_(html, ['Millésime']);
-  result.Format = extractLabelValue_(html, ['Format']) || '750 ml';
+  result.Format = extractLabelValue_(html, ['Format']) || result.Format || '750 ml';
+  if (!result.Producteur) {
+    result.Producteur = extractLabelValue_(html, ['Producteur']);
+  }
 
   return result;
 }
