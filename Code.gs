@@ -541,6 +541,7 @@ function getSaqProductFromUpc_(upc) {
     (item.product && item.product.small_image && item.product.small_image.url) ||
     (item.product && item.product.thumbnail && item.product.thumbnail.url) ||
     '';
+  const mainImageAbsolute = mainImage && mainImage.indexOf('//') === 0 ? ('https:' + mainImage) : mainImage;
 
   const formatMl = normalize(getAttr('format_contenant_ml'));
   const priceFinal = item.product && item.product.price_range && item.product.price_range.minimum_price
@@ -559,12 +560,12 @@ function getSaqProductFromUpc_(upc) {
     couleur: normalize(getAttr('couleur')),
     pays: normalize(getAttr('pays_origine')),
     region: normalize(getAttr('region_origine')),
-    cepage: normalize(getAttr('cepage')) || normalize(getAttr('cepages')),
-    millesime: normalize(getAttr('millesime')),
+    cepage: normalize(getAttr('cepage')),
+    millesime: normalize(getAttr('millesime_produit')),
     format: formatMl ? formatMl + ' ml' : '',
     pastilleGout: normalize(getAttr('pastille_gout')),
     prixValeur: priceFinal,
-    imageProduit: mainImage
+    imageProduit: mainImageAbsolute
   };
 }
 
