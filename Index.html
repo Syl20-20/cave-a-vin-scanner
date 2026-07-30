@@ -465,7 +465,8 @@ function loadInventaire(callback) {
 function populatePaysFilter_() {
   const select = document.getElementById('filterPays');
   const current = select.value;
-  const paysSet = new Set(ALL_WINES.map(w => (w.Pays || '').trim()).filter(p => p));
+  const wines = ALL_WINES || [];
+  const paysSet = new Set(wines.map(w => (w.Pays || '').trim()).filter(p => p));
   const paysList = Array.from(paysSet).sort((a, b) => a.localeCompare(b));
   select.innerHTML = '<option value="">Tous</option>' + paysList.map(p => `<option value="${p}">${p}</option>`).join('');
   select.value = current || '';
@@ -474,7 +475,8 @@ function populatePaysFilter_() {
 function populateTypeFilter_() {
   const select = document.getElementById('filterType');
   const current = select.value;
-  const typeSet = new Set(ALL_WINES.map(w => (w.Type || '').trim()).filter(t => t));
+  const wines = ALL_WINES || [];
+  const typeSet = new Set(wines.map(w => (w.Type || '').trim()).filter(t => t));
   const typeList = Array.from(typeSet).sort((a, b) => a.localeCompare(b));
   select.innerHTML = '<option value="">Tous</option>' + typeList.map(t => `<option value="${t}">${t}</option>`).join('');
   select.value = current || '';
@@ -527,7 +529,7 @@ function renderList() {
   const prixMin = parseFloat(document.getElementById('filterPrixMin').value);
   const prixMax = parseFloat(document.getElementById('filterPrixMax').value);
 
-  let filtered = ALL_WINES.filter(w => {
+  let filtered = (ALL_WINES || []).filter(w => {
     const total = (Number(w.QteCellier)||0)+(Number(w.QteLocker)||0)+(Number(w.QteFrigo)||0);
 
     if (typeFilter && w.Type !== typeFilter) return false;
@@ -662,7 +664,7 @@ function renderAdminList() {
   if (!adminUnlocked) return;
   const q = document.getElementById('adminSearch').value.toLowerCase();
   const list = document.getElementById('adminList');
-  const filtered = ALL_WINES.filter(w => !q || (w.Nom || '').toLowerCase().includes(q));
+  const filtered = (ALL_WINES || []).filter(w => !q || (w.Nom || '').toLowerCase().includes(q));
 
   if (filtered.length === 0) {
     list.innerHTML = '<p class="text-center text-stone-400 py-4">Aucune bouteille trouvée.</p>';
@@ -695,10 +697,10 @@ window.addEventListener('load', () => {
     document.getElementById('scanStatus').textContent = 'Code reçu : ' + PRELOADED_BARCODE;
     showTab('scan');
     handleBarcodeDetected(PRELOADED_BARCODE);
+    loadInventaire(); // charge quand même les données en arrière-plan (nécessaires pour l'onglet Admin)
   } else {
-    showTab('inventaire');
+    showTab('inventaire'); // déclenche déjà loadInventaire() en interne
   }
-  loadInventaire();
 });
 </script>
 </body>
