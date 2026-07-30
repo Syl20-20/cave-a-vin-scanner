@@ -393,7 +393,7 @@ function mapSaqResultToWineData_(found, originalBarcode) {
   const data = {
     Nom: found.nomProduit || '',
     Producteur: found.producteur || '',
-    Type: found.couleur || '',
+    Type: found.identiteProduit || found.couleur || '',
     Pays: found.pays || '',
     Region: found.region || '',
     Cepage: found.cepage || '',
@@ -558,6 +558,7 @@ function getSaqProductFromUpc_(upc) {
     nomProduit: normalize((item.productView && item.productView.name) || (item.product && item.product.name)),
     producteur: normalize(getAttr('nom_producteur')),
     couleur: normalize(getAttr('couleur')),
+    identiteProduit: normalize(getAttr('identite_produit')),
     pays: normalize(getAttr('pays_origine')),
     region: normalize(getAttr('region_origine')),
     cepage: normalize(getAttr('cepage')),
