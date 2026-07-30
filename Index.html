@@ -1,4 +1,3 @@
-/// mauvais texte de comit dans derniere version
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -148,6 +147,7 @@
           <input id="searchInput" type="text" placeholder="🔍 Rechercher (nom, type, pays, emplacement...)"
             class="flex-1 border border-stone-300 rounded-xl px-3 py-2">
           <button id="btnRefreshInventaire" title="Rafraîchir les données" class="bg-stone-100 border border-stone-300 rounded-xl px-3 text-lg">↻</button>
+          <button id="btnResetFilters" title="Réinitialiser la recherche et les filtres" class="bg-stone-100 border border-stone-300 rounded-xl px-3 text-sm whitespace-nowrap">Reset</button>
         </div>
 
         <div class="grid grid-cols-2 gap-2">
@@ -499,6 +499,17 @@ document.getElementById('btnRefreshInventaire').addEventListener('click', () => 
   document.getElementById('wineList').innerHTML = '<p class="text-center text-stone-400 py-6">Actualisation...</p>';
   loadInventaire();
   loadStats();
+});
+
+document.getElementById('btnResetFilters').addEventListener('click', () => {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('filterType').value = '';
+  document.getElementById('filterPays').value = '';
+  document.getElementById('filterEnStock').value = 'oui';
+  document.getElementById('filterPrixMin').value = '';
+  document.getElementById('filterPrixMax').value = '';
+  hasInteracted = false;
+  renderList();
 });
 
 function renderList() {
