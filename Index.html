@@ -184,6 +184,7 @@
 
     <!-- ONGLET DÉTAIL (consultation) -->
     <section id="tab-detail" class="tab-content hidden">
+      <button onclick="showTab('inventaire')" class="text-sm text-stone-500 mb-2 flex items-center gap-1">‹ Retour à l'inventaire</button>
       <div class="bg-white rounded-2xl shadow p-4 mb-4">
         <img id="detailImage" class="hidden w-28 h-28 object-contain mx-auto mb-3 rounded-lg bg-stone-50" />
         <h2 id="detailNom" class="text-lg font-bold text-center mb-1"></h2>
@@ -262,6 +263,7 @@ let ALL_WINES = [];
 let hasInteracted = false; // devient true dès qu'une recherche ou un filtre est utilisé
 let html5QrCode = null;
 let editingId = null;
+let formReturnTab = 'inventaire'; // écran vers lequel revenir après Annuler/Enregistrer depuis le formulaire
 
 // ---------- NAVIGATION ----------
 function showTab(tab) {
@@ -398,7 +400,8 @@ function openForm(existingWine, barcode, saqData) {
 document.getElementById('btnCancelForm').addEventListener('click', () => {
   document.getElementById('wineForm').reset();
   editingId = null;
-  showTab('inventaire');
+  showTab(formReturnTab);
+  formReturnTab = 'inventaire';
 });
 
 document.getElementById('wineForm').addEventListener('submit', (e) => {
@@ -432,7 +435,8 @@ document.getElementById('wineForm').addEventListener('submit', (e) => {
     if (res && res.updated) {
       document.getElementById('scanStatus').textContent = 'Ce vin existait déjà : sa fiche a été mise à jour (pas de doublon créé).';
     }
-    showTab('inventaire');
+    showTab(formReturnTab);
+    formReturnTab = 'inventaire';
   };
 
   if (editingId) {
@@ -601,6 +605,7 @@ function quickAdjust(id, emplacement, delta) {
 
 document.getElementById('btnDetailEdit').addEventListener('click', () => {
   if (!currentDetailWine) return;
+  formReturnTab = 'detail';
   openForm(currentDetailWine, currentDetailWine.CodeBarre, null);
   showTab('form');
 });
