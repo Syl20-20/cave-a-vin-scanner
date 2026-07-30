@@ -70,6 +70,8 @@
         <form id="wineForm" class="grid grid-cols-2 gap-2">
           <input type="hidden" id="f_id">
           <input type="hidden" id="f_barcode">
+          <input type="hidden" id="f_imageurl">
+          <input type="hidden" id="f_pastillegout">
 
           <label class="col-span-2 text-sm text-stone-500">Nom *
             <input id="f_nom" required class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
@@ -184,7 +186,6 @@
 
     <!-- ONGLET DÉTAIL (consultation) -->
     <section id="tab-detail" class="tab-content hidden">
-      <button onclick="showTab('inventaire')" class="text-sm text-stone-500 mb-2 flex items-center gap-1">‹ Retour à l'inventaire</button>
       <div class="bg-white rounded-2xl shadow p-4 mb-4">
         <img id="detailImage" class="hidden w-28 h-28 object-contain mx-auto mb-3 rounded-lg bg-stone-50" />
         <h2 id="detailNom" class="text-lg font-bold text-center mb-1"></h2>
@@ -205,7 +206,10 @@
           <div id="detailQuantites" class="space-y-2"></div>
         </div>
 
-        <button id="btnDetailEdit" class="w-full bg-rose-800 text-white rounded-xl py-3 font-medium">✏️ Modifier / Noter</button>
+        <div class="flex gap-2">
+          <button onclick="showTab('inventaire')" class="flex-1 bg-stone-200 text-stone-700 rounded-xl py-3 font-medium">‹ Retour</button>
+          <button id="btnDetailEdit" class="flex-1 bg-rose-800 text-white rounded-xl py-3 font-medium">✏️ Modifier / Noter</button>
+        </div>
       </div>
     </section>
 
@@ -391,6 +395,8 @@ function openForm(existingWine, barcode, saqData) {
   document.getElementById('f_qte_frigo').value = src.QteFrigo || 0;
 
   const img = document.getElementById('formImage');
+  document.getElementById('f_imageurl').value = src.ImageURL || '';
+  document.getElementById('f_pastillegout').value = src.PastilleGout || '';
   if (src.ImageURL) { img.src = src.ImageURL; img.classList.remove('hidden'); }
   else { img.classList.add('hidden'); }
 
@@ -408,6 +414,8 @@ document.getElementById('wineForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const wine = {
     CodeBarre: document.getElementById('f_barcode').value,
+    ImageURL: document.getElementById('f_imageurl').value,
+    PastilleGout: document.getElementById('f_pastillegout').value,
     Nom: document.getElementById('f_nom').value,
     Producteur: document.getElementById('f_producteur').value,
     Type: document.getElementById('f_type').value,
