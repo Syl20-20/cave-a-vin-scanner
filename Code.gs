@@ -357,8 +357,9 @@ function getHistorique(limit) {
 
 /**
  * Interroge l'API GraphQL interne de SAQ.com (utilisée par leur propre site)
- * pour retrouver la fiche produit correspondant à un code-barres, puis
- * en extrait les métadonnées via le JSON-LD de la page produit.
+ * pour retrouver la fiche produit correspondant à un code-barres, et en
+ * extrait directement toutes les métadonnées (attributs + image), sans
+ * nécessiter de second appel à la page produit.
  *
  * NOTE : cette API n'est pas documentée officiellement par la SAQ — elle a été
  * identifiée par inspection du trafic réseau de leur site. Elle peut cesser de
@@ -367,19 +368,17 @@ function getHistorique(limit) {
 function fetchSAQData(barcode) {
   try {
     const found = getSaqProductFromUpc_(barcode);
-    if (!found) {
-      // Nouvelle tentative avec une variante du code (avec/sans zéro initial)
-      let altBarcode = null;
-      if (barcode.length === 13) altBarcode = '0' + barcode;
-      else if (barcode.length === 14 && barcode.charAt(0) === '0') altBarcode = barcode.substring(1);
+    if (found) return mapSaqResultToWineData_(found, barcode);
 
-      const altFound = altBarcode ? getSaqProductFromUpc_(altBarcode) : null;
-      if (!altFound) {
-        return { success: false, error: 'Aucun produit trouvé pour ce code-barres sur SAQ.com' };
-      }
-      return fetchProductDetails_(altFound.productUrl, barcode);
-    }
-    return fetchProductDetails_(found.productUrl, barcode);
+    // Nouvelle tentative avec une variante du code (avec/sans zéro initial)
+    let altBarcode = null;
+    if (barcode.length === 13) altBarcode = '0' + barcode;
+    else if (barcode.length === 14 && barcode.charAt(0) === '0') altBarcode = barcode.substring(1);
+
+    const altFound = altBarcode ? getSaqProductFromUpc_(altBarcode) : null;
+    if (altFound) return mapSaqResultToWineData_(altFound, barcode);
+
+    return { success: false, error: 'Aucun produit trouvé pour ce code-barres sur SAQ.com' };
 
   } catch (err) {
     Logger.log('Exception fetchSAQData : ' + err.toString());
@@ -388,8 +387,33 @@ function fetchSAQData(barcode) {
 }
 
 /**
- * Appelle l'API GraphQL Adobe Commerce du site SAQ pour retrouver
- * l'URL de la fiche produit correspondant à un code-barres (UPC/EAN).
+ * Convertit le résultat brut de l'API SAQ vers le format attendu par l'inventaire.
+ */
+function mapSaqResultToWineData_(found, originalBarcode) {
+  const data = {
+    Nom: found.nomProduit || '',
+    Producteur: found.producteur || '',
+    Type: found.couleur || '',
+    Pays: found.pays || '',
+    Region: found.region || '',
+    Cepage: found.cepage || '',
+    Millesime: found.millesime || '',
+    Format: found.format || '750 ml',
+    PrixSAQ: found.prixValeur != null ? String(found.prixValeur) : '',
+    ImageURL: found.imageProduit || '',
+    PastilleGout: found.pastilleGout || '',
+    CodeBarre: originalBarcode
+  };
+  if (!data.Nom) {
+    return { success: false, error: 'Produit trouvé mais impossible d\'en extraire les données (' + found.productUrl + ')' };
+  }
+  return { success: true, data: data };
+}
+
+/**
+ * Appelle l'API GraphQL Adobe Commerce du site SAQ pour retrouver la fiche
+ * produit correspondant à un code-barres (UPC/EAN), avec attributs détaillés
+ * (producteur, format, pays, région, couleur, pastille de goût...) et image.
  * Retourne null si aucun produit n'est trouvé.
  */
 function getSaqProductFromUpc_(upc) {
@@ -414,8 +438,28 @@ function getSaqProductFromUpc_(upc) {
       ) {
         total_count
         items {
-          product { sku name canonical_url }
-          productView { sku name inStock url urlKey }
+          product {
+            sku
+            name
+            canonical_url
+            image { url }
+            small_image { url }
+            thumbnail { url }
+            price_range {
+              minimum_price {
+                final_price { value currency }
+              }
+            }
+          }
+          productView {
+            sku
+            name
+            inStock
+            url
+            urlKey
+            images { label url roles }
+            attributes { label name value }
+          }
         }
       }
     }
@@ -478,37 +522,50 @@ function getSaqProductFromUpc_(upc) {
   const productUrl = (item.productView && item.productView.url)
     || ('https://www.saq.com/fr/' + saqCode);
 
+  const attributes = (item.productView && item.productView.attributes) || [];
+  const images = (item.productView && item.productView.images) || [];
+
+  function getAttr(name) {
+    const attr = attributes.find(a => a.name === name);
+    return attr ? attr.value : '';
+  }
+  function normalize(value) {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) return value.join(', ');
+    return String(value).trim();
+  }
+
+  const mainImage =
+    (item.product && item.product.image && item.product.image.url) ||
+    (images.find(img => Array.isArray(img.roles) && img.roles.includes('image')) || {}).url ||
+    (item.product && item.product.small_image && item.product.small_image.url) ||
+    (item.product && item.product.thumbnail && item.product.thumbnail.url) ||
+    '';
+
+  const formatMl = normalize(getAttr('format_contenant_ml'));
+  const priceFinal = item.product && item.product.price_range && item.product.price_range.minimum_price
+    && item.product.price_range.minimum_price.final_price
+    ? item.product.price_range.minimum_price.final_price.value : null;
+
+  Logger.log('Attributs disponibles pour ' + upc + ' : ' + attributes.map(a => a.name).join(', '));
   Logger.log('Produit trouvé via GraphQL : ' + productUrl);
-  return { upc: String(upc), saqCode: String(saqCode), productUrl: productUrl };
-}
 
-/**
- * Charge la page produit SAQ à l'URL donnée et en extrait les métadonnées
- * via le JSON-LD (voir parseSaqProductHtml_ / extractLabelValue_ plus bas).
- */
-function fetchProductDetails_(productUrl, originalBarcode) {
-  const productResponse = UrlFetchApp.fetch(productUrl, {
-    muteHttpExceptions: true,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-    }
-  });
-
-  const prodCode = productResponse.getResponseCode();
-  Logger.log('Code réponse fiche produit : ' + prodCode + ' (' + productUrl + ')');
-  if (prodCode !== 200) {
-    return { success: false, error: 'SAQ a répondu avec le code ' + prodCode + ' (fiche produit : ' + productUrl + ')' };
-  }
-
-  const productHtml = productResponse.getContentText();
-  const data = parseSaqProductHtml_(productHtml, productUrl);
-  Logger.log('Données extraites : ' + JSON.stringify(data));
-
-  if (!data.Nom) {
-    return { success: false, error: 'Produit trouvé (' + productUrl + ') mais impossible d\'en extraire les données' };
-  }
-  data.CodeBarre = originalBarcode;
-  return { success: true, data: data };
+  return {
+    upc: String(upc),
+    saqCode: String(saqCode),
+    productUrl: productUrl,
+    nomProduit: normalize((item.productView && item.productView.name) || (item.product && item.product.name)),
+    producteur: normalize(getAttr('nom_producteur')),
+    couleur: normalize(getAttr('couleur')),
+    pays: normalize(getAttr('pays_origine')),
+    region: normalize(getAttr('region_origine')),
+    cepage: normalize(getAttr('cepage')) || normalize(getAttr('cepages')),
+    millesime: normalize(getAttr('millesime')),
+    format: formatMl ? formatMl + ' ml' : '',
+    pastilleGout: normalize(getAttr('pastille_gout')),
+    prixValeur: priceFinal,
+    imageProduit: mainImage
+  };
 }
 
 /**
@@ -519,6 +576,16 @@ function fetchProductDetails_(productUrl, originalBarcode) {
 function testSAQ() {
   const result = fetchSAQData('08410310602757');
   Logger.log('RÉSULTAT FINAL : ' + JSON.stringify(result, null, 2));
+}
+
+/**
+ * Diagnostic : liste tous les attributs bruts disponibles pour un produit
+ * qui possède un Cépage et un Millésime connus (Reserva Privada 2021),
+ * afin de trouver les noms exacts d'attributs GraphQL à utiliser.
+ */
+function testSAQAttributsComplets() {
+  const found = getSaqProductFromUpc_('08410310601781');
+  Logger.log('Résultat mappé : ' + JSON.stringify(found, null, 2));
 }
 
 /**
