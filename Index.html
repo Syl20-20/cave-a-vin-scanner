@@ -82,10 +82,8 @@
           </label>
 
           <label class="text-sm text-stone-500">Type
-            <select id="f_type" class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
-              <option>Rouge</option><option>Blanc</option><option>Rosé</option>
-              <option>Mousseux</option><option>Fortifié</option><option>Autre</option>
-            </select>
+            <input id="f_type" list="typeDatalist" placeholder="Ex: Vin rouge, Vin mousseux..." class="w-full border border-stone-300 rounded-xl px-3 py-2 mt-1">
+            <datalist id="typeDatalist"></datalist>
           </label>
 
           <label class="text-sm text-stone-500">Pays
@@ -155,8 +153,6 @@
           <label class="text-xs text-stone-500">Type
             <select id="filterType" class="w-full border border-stone-300 rounded-xl px-2 py-2 mt-1 text-sm">
               <option value="">Tous</option>
-              <option>Rouge</option><option>Blanc</option><option>Rosé</option>
-              <option>Mousseux</option><option>Fortifié</option><option>Autre</option>
             </select>
           </label>
           <label class="text-xs text-stone-500">Pays
@@ -381,7 +377,7 @@ function openForm(existingWine, barcode, saqData) {
   const src = existingWine || saqData || {};
   document.getElementById('f_nom').value = src.Nom || '';
   document.getElementById('f_producteur').value = src.Producteur || '';
-  document.getElementById('f_type').value = src.Type || 'Rouge';
+  document.getElementById('f_type').value = src.Type || '';
   document.getElementById('f_pays').value = src.Pays || '';
   document.getElementById('f_region').value = src.Region || '';
   document.getElementById('f_cepage').value = src.Cepage || '';
@@ -459,6 +455,7 @@ function loadInventaire(callback) {
   google.script.run.withSuccessHandler(items => {
     ALL_WINES = items;
     populatePaysFilter_();
+    populateTypeFilter_();
     renderList();
     if (callback) callback();
   }).getInventaire();
@@ -471,6 +468,19 @@ function populatePaysFilter_() {
   const paysList = Array.from(paysSet).sort((a, b) => a.localeCompare(b));
   select.innerHTML = '<option value="">Tous</option>' + paysList.map(p => `<option value="${p}">${p}</option>`).join('');
   select.value = current || '';
+}
+
+function populateTypeFilter_() {
+  const select = document.getElementById('filterType');
+  const current = select.value;
+  const typeSet = new Set(ALL_WINES.map(w => (w.Type || '').trim()).filter(t => t));
+  const typeList = Array.from(typeSet).sort((a, b) => a.localeCompare(b));
+  select.innerHTML = '<option value="">Tous</option>' + typeList.map(t => `<option value="${t}">${t}</option>`).join('');
+  select.value = current || '';
+
+  // Alimente aussi les suggestions du champ Type dans le formulaire d'ajout/édition
+  const datalist = document.getElementById('typeDatalist');
+  datalist.innerHTML = typeList.map(t => `<option value="${t}">`).join('');
 }
 
 function markInteractedAndRender() {
