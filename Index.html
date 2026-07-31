@@ -6,12 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Ma Cave à Vin</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
   .tab-btn.active { color: #7c2d3e; border-color: #7c2d3e; }
   .star { cursor: pointer; }
-  #reader video { border-radius: 0.75rem; }
   ::-webkit-scrollbar { display: none; }
 </style>
 </head>
@@ -31,27 +29,15 @@
   <!-- CONTENU DES ONGLETS -->
   <main class="p-3 max-w-lg mx-auto">
 
-    <!-- ONGLET SCANNER -->
+    <!-- ONGLET AJOUT PAR CODE (UPC/CUP) -->
     <section id="tab-scan" class="tab-content">
       <div class="bg-white rounded-2xl shadow p-4 mb-4">
-        <h2 class="font-semibold mb-3">Scanner une bouteille</h2>
-        <div id="reader" class="w-full rounded-xl overflow-hidden bg-black" style="min-height:250px;"></div>
-        <div class="flex gap-2 mt-3">
-          <button id="btnStartScan" class="flex-1 bg-rose-800 text-white rounded-xl py-3 font-medium active:scale-95 transition">📷 Démarrer le scan</button>
-          <button id="btnStopScan" class="hidden flex-1 bg-stone-300 text-stone-700 rounded-xl py-3 font-medium">Arrêter</button>
-        </div>
-        <p class="text-xs text-stone-400 mt-2">
-          La caméra ne fonctionne pas ici ? Utilisez le
-          <a id="externalScanLink" href="#" target="_blank" class="text-rose-800 underline font-medium">scanner externe</a>
-          (s'ouvre hors de l'app, sans restriction caméra).
-        </p>
-        <div class="mt-3">
-          <label class="text-sm text-stone-500">Ou saisir le code-barres manuellement :</label>
-          <div class="flex gap-2 mt-1">
-            <input id="manualBarcode" type="text" inputmode="numeric" placeholder="Ex: 0067900123456"
-              class="flex-1 border border-stone-300 rounded-xl px-3 py-2">
-            <button id="btnManualLookup" class="bg-stone-800 text-white rounded-xl px-4">OK</button>
-          </div>
+        <h2 class="font-semibold mb-3">Ajouter une bouteille par code</h2>
+        <label class="text-sm text-stone-500">Code-barres UPC / CUP :</label>
+        <div class="flex gap-2 mt-1">
+          <input id="manualBarcode" type="text" inputmode="numeric" placeholder="Ex: 0067900123456"
+            class="flex-1 border border-stone-300 rounded-xl px-3 py-2">
+          <button id="btnManualLookup" class="bg-stone-800 text-white rounded-xl px-4">OK</button>
         </div>
         <div id="scanStatus" class="text-sm text-stone-500 mt-2"></div>
       </div>
@@ -147,7 +133,6 @@
           <input id="searchInput" type="text" placeholder="🔍 Rechercher (nom, type, pays, emplacement...)"
             class="flex-1 border border-stone-300 rounded-xl px-3 py-2">
           <button id="btnRefreshInventaire" title="Rafraîchir les données" class="bg-stone-100 border border-stone-300 rounded-xl px-3 text-lg">↻</button>
-          <button id="btnResetFilters" title="Réinitialiser la recherche et les filtres" class="bg-stone-100 border border-stone-300 rounded-xl px-3 text-sm whitespace-nowrap">Reset</button>
         </div>
 
         <div class="grid grid-cols-2 gap-2">
@@ -238,7 +223,7 @@
   <!-- NAVIGATION BASSE (mobile-first) -->
   <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex z-30" style="padding-bottom: env(safe-area-inset-bottom);">
     <button data-tab="scan" class="tab-btn flex-1 py-3 text-stone-500 border-t-2 border-transparent flex flex-col items-center text-xs">
-      <span class="text-xl">📷</span>Scanner
+      <span class="text-xl">🔢</span>Code UPC
     </button>
     <button data-tab="form" class="tab-btn flex-1 py-3 text-stone-500 border-t-2 border-transparent flex flex-col items-center text-xs">
       <span class="text-xl">➕</span>Ajouter
@@ -252,17 +237,14 @@
   </nav>
 
 <script>
-// ⚠️ REMPLACEZ par l'URL de votre page scanner.html hébergée sur GitHub Pages
-const EXTERNAL_SCANNER_URL = 'https://syl20-20.github.io/cave-a-vin-scanner/scanner.html';
-
 // Code-barres reçu de scanner.html via ?barcode=XXXX (rempli côté serveur par doGet)
+// Conservé pour compatibilité si un ancien lien externe est encore utilisé.
 const PRELOADED_BARCODE = "<?= barcodeParam ?>";
 const SHEET_URL = "<?= sheetUrl ?>";
 const ADMIN_PASSWORD = 'mcav'; // ⚠️ Mot de passe codé en dur — solution temporaire, non sécurisée à long terme
 
 let ALL_WINES = [];
 let hasInteracted = false; // devient true dès qu'une recherche ou un filtre est utilisé
-let html5QrCode = null;
 let editingId = null;
 let formReturnTab = 'inventaire'; // écran vers lequel revenir après Annuler/Enregistrer depuis le formulaire
 
@@ -273,8 +255,7 @@ function showTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
-  if (tab !== 'scan' && html5QrCode) stopScanner();
-  if (tab === 'inventaire') loadInventaire();
+  if (tab === 'inventaire') loadInventaire(loadStats);
 }
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => showTab(btn.dataset.tab));
@@ -288,66 +269,11 @@ function loadStats() {
   }).getStats();
 }
 
-// ---------- SCANNER ----------
-document.getElementById('btnStartScan').addEventListener('click', startScanner);
-document.getElementById('btnStopScan').addEventListener('click', stopScanner);
+// ---------- SAISIE DU CODE UPC/CUP ----------
 document.getElementById('btnManualLookup').addEventListener('click', () => {
   const code = document.getElementById('manualBarcode').value.trim();
   if (code) handleBarcodeDetected(code);
 });
-
-function startScanner() {
-  const statusEl = document.getElementById('scanStatus');
-  statusEl.textContent = 'Initialisation de la caméra...';
-  html5QrCode = new Html5Qrcode("reader");
-  Html5Qrcode.getCameras().then(cameras => {
-    if (!cameras || cameras.length === 0) {
-      statusEl.textContent = "Aucune caméra détectée.";
-      return;
-    }
-    // Préférence pour la caméra arrière sur iPhone
-    const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
-    html5QrCode.start(
-      backCam.id,
-      {
-        fps: 10,
-        qrbox: { width: 280, height: 180 },
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_128
-        ]
-      },
-      (decodedText) => {
-        statusEl.textContent = 'Code détecté : ' + decodedText;
-        handleBarcodeDetected(decodedText);
-        stopScanner();
-      },
-      () => { /* erreurs de scan ignorées en continu */ }
-    ).then(() => {
-      document.getElementById('btnStartScan').classList.add('hidden');
-      document.getElementById('btnStopScan').classList.remove('hidden');
-      statusEl.textContent = 'Visez le code-barres...';
-    }).catch(err => {
-      statusEl.textContent = "Erreur d'accès caméra : " + err;
-    });
-  }).catch(err => {
-    statusEl.textContent = "Permission caméra refusée ou indisponible : " + err;
-  });
-}
-
-function stopScanner() {
-  if (html5QrCode) {
-    html5QrCode.stop().then(() => {
-      html5QrCode.clear();
-      html5QrCode = null;
-    }).catch(() => {});
-  }
-  document.getElementById('btnStartScan').classList.remove('hidden');
-  document.getElementById('btnStopScan').classList.add('hidden');
-}
 
 // ---------- LOGIQUE : CODE-BARRES SCANNÉ OU SAISI ----------
 function handleBarcodeDetected(barcode) {
@@ -436,11 +362,11 @@ document.getElementById('wineForm').addEventListener('submit', (e) => {
     btn.disabled = false; btn.textContent = '💾 Enregistrer';
     document.getElementById('wineForm').reset();
     editingId = null;
-    loadStats();
     if (res && res.updated) {
       document.getElementById('scanStatus').textContent = 'Ce vin existait déjà : sa fiche a été mise à jour (pas de doublon créé).';
     }
-    showTab(formReturnTab);
+    showTab(formReturnTab); // recharge l'inventaire ET les stats de façon séquentielle si formReturnTab === 'inventaire'
+    if (formReturnTab !== 'inventaire') loadStats();
     formReturnTab = 'inventaire';
   };
 
@@ -499,19 +425,7 @@ document.getElementById('filterPrixMin').addEventListener('input', markInteracte
 document.getElementById('filterPrixMax').addEventListener('input', markInteractedAndRender);
 document.getElementById('btnRefreshInventaire').addEventListener('click', () => {
   document.getElementById('wineList').innerHTML = '<p class="text-center text-stone-400 py-6">Actualisation...</p>';
-  loadInventaire();
-  loadStats();
-});
-
-document.getElementById('btnResetFilters').addEventListener('click', () => {
-  document.getElementById('searchInput').value = '';
-  document.getElementById('filterType').value = '';
-  document.getElementById('filterPays').value = '';
-  document.getElementById('filterEnStock').value = 'oui';
-  document.getElementById('filterPrixMin').value = '';
-  document.getElementById('filterPrixMax').value = '';
-  hasInteracted = false;
-  renderList();
+  loadInventaire(loadStats);
 });
 
 function renderList() {
@@ -681,23 +595,20 @@ function renderAdminList() {
 function adminDeleteWine(id, nom) {
   if (!confirm('Supprimer définitivement "' + nom + '" de l\'inventaire ? Cette action est irréversible.')) return;
   google.script.run.withSuccessHandler(() => {
-    loadInventaire(() => { renderAdminList(); });
-    loadStats();
+    loadInventaire(() => { renderAdminList(); loadStats(); });
   }).deleteWine(id);
 }
 
 // ---------- INIT ----------
 window.addEventListener('load', () => {
-  document.getElementById('externalScanLink').href = EXTERNAL_SCANNER_URL;
   document.getElementById('adminSheetLink').href = SHEET_URL;
   loadStats();
 
   if (PRELOADED_BARCODE) {
-    // Un code-barres a été transmis par scanner.html (GitHub Pages) -> on le traite directement
+    // Compatibilité : si un lien externe encore actif transmet un ?barcode=, on le traite
     document.getElementById('scanStatus').textContent = 'Code reçu : ' + PRELOADED_BARCODE;
     showTab('scan');
     handleBarcodeDetected(PRELOADED_BARCODE);
-    loadInventaire(); // charge quand même les données en arrière-plan (nécessaires pour l'onglet Admin)
   } else {
     showTab('inventaire'); // déclenche déjà loadInventaire() en interne
   }
