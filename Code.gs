@@ -101,7 +101,16 @@ function sheetToObjects_(sheet) {
   return rows
     .map((row, i) => {
       const obj = {};
-      headers.forEach((h, idx) => obj[h] = row[idx]);
+      headers.forEach((h, idx) => {
+        let value = row[idx];
+        // Protection : si une cellule numérique/texte a été auto-convertie en Date
+        // par Google Sheets (ex: "5.25" interprété comme 25 mai), on neutralise
+        // cette valeur au lieu de la laisser corrompre la sérialisation client.
+        if (Object.prototype.toString.call(value) === '[object Date]') {
+          value = '';
+        }
+        obj[h] = value;
+      });
       obj._row = i + 2; // ligne réelle dans le sheet (1-based + header)
       return obj;
     })
@@ -114,6 +123,21 @@ function generateId_() {
 
 function nowIso_() {
   return new Date().toISOString();
+}
+
+/**
+ * Convertit une valeur de prix en nombre JS explicite (jamais en texte ambigu),
+ * pour empêcher Google Sheets d'auto-convertir un texte comme "5.25" en date
+ * (interprété comme mois=5, jour=25 selon les paramètres régionaux du Sheet).
+ * Retourne '' si la valeur n'est pas un nombre valide.
+ */
+function parsePrixSafe_(value) {
+  if (value === null || value === undefined || value === '') return '';
+  // Si une donnée corrompue (Date) nous arrive déjà en entrée, on l'ignore plutôt
+  // que de la réécrire telle quelle.
+  if (Object.prototype.toString.call(value) === '[object Date]') return '';
+  const num = parseFloat(String(value).replace(',', '.'));
+  return isNaN(num) ? '' : num;
 }
 
 // ============================================================
@@ -169,7 +193,7 @@ function addWine(wine) {
     wine.Cepage || '',
     wine.Millesime || '',
     wine.Format || '750 ml',
-    wine.PrixSAQ || '',
+    parsePrixSafe_(wine.PrixSAQ),
     wine.ImageURL || '',
     wine.PastilleGout || '',
     Number(wine.QteCellier) || 0,
@@ -213,7 +237,7 @@ function updateWine(id, updates) {
   headers.forEach((h, idx) => {
     if (h === 'DateAjout') return; // ne jamais écraser la date d'ajout
     if (updates.hasOwnProperty(h)) {
-      currentRow[idx] = updates[h];
+      currentRow[idx] = (h === 'PrixSAQ') ? parsePrixSafe_(updates[h]) : updates[h];
     }
   });
   // toujours mettre à jour DateMAJ
@@ -532,7 +556,7 @@ function getSaqProductFromUpc_(upc) {
   function normalize(value) {
     if (value === null || value === undefined) return '';
     if (Array.isArray(value)) return value.join(', ');
-    return String(value).trim();
+    return decodeHtmlEntities_(String(value).trim());
   }
 
   const mainImage =
@@ -578,6 +602,40 @@ function getSaqProductFromUpc_(upc) {
 function testSAQ() {
   const result = fetchSAQData('08410310602757');
   Logger.log('RÉSULTAT FINAL : ' + JSON.stringify(result, null, 2));
+}
+
+/**
+ * Diagnostic : inspecte le contenu exact (type JS + longueur) du champ Type
+ * de chaque bouteille, pour détecter un caractère invisible ou une valeur anormale.
+ */
+function debugInventaireTypes() {
+  const items = getInventaire();
+  items.forEach(it => {
+    Logger.log(
+      it.Nom + ' | Type="' + it.Type + '" | typeof=' + (typeof it.Type) +
+      ' | longueur=' + (it.Type ? it.Type.length : 'N/A') +
+      ' | JSON=' + JSON.stringify(it.Type)
+    );
+  });
+}
+
+/**
+ * Diagnostic complet : affiche TOUTES les colonnes de chaque bouteille,
+ * pour détecter un décalage de colonnes ou une valeur mal alignée.
+ */
+function debugInventaireComplet() {
+  const sheet = getSheet_(SHEET_INVENTAIRE);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  Logger.log('EN-TÊTES (' + headers.length + ' colonnes) : ' + JSON.stringify(headers));
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    Logger.log('--- Ligne ' + (i + 1) + ' (' + row.length + ' colonnes) ---');
+    headers.forEach((h, idx) => {
+      Logger.log('  ' + h + ' = ' + JSON.stringify(row[idx]));
+    });
+  }
 }
 
 /**
@@ -650,6 +708,21 @@ function parseSaqProductHtml_(html, url) {
   }
 
   return result;
+}
+
+/**
+ * Décode les entités HTML les plus courantes (&amp;, &#39;, etc.) pouvant
+ * apparaître dans les attributs texte retournés par l'API SAQ.
+ */
+function decodeHtmlEntities_(str) {
+  if (!str) return str;
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
 }
 
 /**
